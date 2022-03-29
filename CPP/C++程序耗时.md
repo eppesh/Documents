@@ -272,7 +272,7 @@ int main()
 {
     LARGE_INTEGER start_time;
     LARGE_INTEGER end_time;
-    LARGE_INTEGER elapsed_miscroseconds;
+    LARGE_INTEGER elapsed_microseconds;
     LARGE_INTEGER frequency;                    // the number of ticks-per-second
 
     QueryPerformanceFrequency(&frequency);
@@ -281,7 +281,7 @@ int main()
     std::cout << DoSomething(100000000) << std::endl;
     
     QueryPerformanceCounter(&end_time);
-    elapsed_miscroseconds.QuadPart = end_time.QuadPart - start_time.QuadPart;   // the elapsed number of ticks
+    elapsed_microseconds.QuadPart = end_time.QuadPart - start_time.QuadPart;   // the elapsed number of ticks
     
     //
 	// We now have the elapsed number of ticks, along with the
@@ -291,10 +291,10 @@ int main()
 	// to microseconds *before* dividing by ticks-per-second.
 	//
     
-    elapsed_miscroseconds.QuadPart *= 1000000;
-    elapsed_miscroseconds.QuadPart /= frequency.QuadPart;
+    elapsed_microseconds.QuadPart *= 1000000;
+    elapsed_microseconds.QuadPart /= frequency.QuadPart;
 
-    std::cout << "QPC(): " << elapsed_miscroseconds.QuadPart << " microseconds" << std::endl;
+    std::cout << "QPC(): " << elapsed_microseconds.QuadPart << " microseconds" << std::endl;
     system("pause");
     return 0;
 }
