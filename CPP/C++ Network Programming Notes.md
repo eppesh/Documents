@@ -539,7 +539,32 @@ To run this codes, we don't need two machines. One is enough!
 
 - `<unistd.h>`: `read(), write(), close()`等函数的头文件；
 
-- `<arpa/inet.h>`: `inet_ntoa()`等函数的头文件；
+- `<arpa/inet.h>`: `inet_ntoa(), inet_addr()`等函数的头文件；
+
+常用头文件示例：
+
+```c++
+// server
+#include <arpa/inet.h>			// inet_ntoa()
+#include <cstdio>				// printf, perror()
+#include <cstring>				// memeset()
+#include <sys/socket.h>			// socket()
+#include <sys/types.h>
+#include <unistd.h>				// read(), write(), close()
+
+
+// client
+#include <cstdio>
+#include <cstdlib>				// atoi()
+#include <cstring>				// memeset()
+#include <netinet/in.h>			// htons()
+#include <netdb.h>				// gethostbyname()
+#include <sys/socket.h>			// socket()
+#include <sys/types.h>
+#include <unistd.h>				// read(), write(), close()
+```
+
+
 
 ### Summary
 
@@ -908,7 +933,7 @@ typedef struct fd_set {
 
 #### poll
 
-仅Linux支持；
+[poll()](https://man7.org/linux/man-pages/man2/poll.2.html) 仅Linux支持；
 
 ```c++
 int poll(struct pollfd *fds, nfds_t nfds, int timeout);
@@ -941,6 +966,159 @@ struct pollfd {
 2. `kernel`返回后，需要**轮询**所有`fd`找出就绪的`fd`，随着`fd`数量的增加，性能会逐渐下降（因为`fds`是链表，轮询时相当于对链表的遍历）；
 
 注：对于数据已就绪的`fd`，如果没有被处理，下次`poll()`时还会继续报告该`fd`; 这一点跟`epoll()`不一样。
+
+示例程序1：(参考：[CSocket](https://github.com/MrCoderStack/CSocket);)
+
+server_poll.cpp
+
+```c++
+#include <arpa/inet.h>			// inet_ntoa()
+#include <cstdio>				// printf, perror()
+#include <cstring>				// memeset()
+#include <iostream>
+#include <sys/socket.h>			// socket()
+#include <sys/types.h>
+#include <sys/poll.h>           // poll()
+#include <unistd.h>				// read(), write(), close()
+
+const int kBacklog = 100;       // 最大积压数
+
+int main()
+{
+    int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+    int connection_fd[kBacklog] = { 0 };
+
+    sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    inet_aton("0.0.0.0", &server_addr.sin_addr);
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(8888);
+
+    int option = 1;
+    setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, &option, sizeof(option));
+
+    bind(listen_fd, (sockaddr *)&server_addr, sizeof(server_addr));
+    listen(listen_fd, 100);
+
+    int flag = -1;
+    pollfd fds[kBacklog + 1];       // 待监听的fd: kBacklog 个通信socket 和 1个监听socket
+    memset(fds, flag, sizeof(fds));
+    fds[0].fd = listen_fd;
+    fds[0].events = POLLIN;
+
+    int nfds = 1;                   // fds 中待监听的fd总数
+    int timeout = -1;               // 永不超时
+    
+    for (int i = 1; i <= kBacklog; ++i)
+    {
+        int result = poll(fds, nfds, timeout);
+        if (result < 0)
+        {
+            printf("poll error, result %d\n", result);
+            continue;
+        }
+
+        if (fds[0].revents & POLLIN)        // listen_fd 检测到有新客户端连接过来
+        {
+            connection_fd[i - 1] = accept(listen_fd, nullptr, nullptr);
+            fds[i].fd = connection_fd[i - 1];
+            fds[i].events = POLLIN;
+            nfds++;
+            printf("New client came, local fd is [%d]\n", connection_fd[i - 1]);
+        }
+
+        for (int j = 0; j < kBacklog; ++j)
+        {
+            char buffer[1024] = { 0 };
+            if (connection_fd[j] > 0 && (fds[j + 1].revents & POLLIN))  // 检测已连接的socket的读事件
+            {
+                int recv_len = recv(connection_fd[j], buffer, sizeof(buffer) - 1, 0);
+                if (recv_len > 0)
+                {
+                    printf("recv data [%s] from local fd [%d] \n", buffer, connection_fd[j]);
+                }
+                else if (recv_len == 0)
+                {
+                    close(connection_fd[j]);
+                    memset(&fds[j + 1], flag, sizeof(pollfd));
+                    printf("Connection closed fd [%d]\n", connection_fd[j]);
+                    connection_fd[j] = 0;
+                }
+                else
+                {
+                    
+                    close(connection_fd[j]);
+                    memset(&fds[j + 1], flag, sizeof(pollfd));
+                    printf("recv error; recv_len is %d; %s; errno:%d\n", recv_len, strerror(errno), errno);
+                    connection_fd[j] = 0;
+                }
+            }
+        } // for j
+    } // for i
+
+    close(listen_fd);
+    return 0;
+}
+```
+
+client_poll.cpp
+
+```c++
+// client
+#include <arpa/inet.h>			// inet_ntoa()
+#include <cstdio>
+#include <cstdlib>				// atoi()
+#include <cstring>				// memeset()
+#include <netinet/in.h>			// htons()
+#include <netdb.h>				// gethostbyname()
+#include <sys/socket.h>			// socket()
+#include <sys/types.h>
+#include <unistd.h>				// read(), write(), close()
+
+int main()
+{
+    int client_fd = socket(AF_INET, SOCK_STREAM, 0);
+
+    sockaddr_in server_addr;
+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(8888);
+
+    connect(client_fd, (const sockaddr *)&server_addr, sizeof(sockaddr_in));
+    char send_buffer[100] = "This is demo.";
+    int index = 1;
+    while (true)
+    {
+        send(client_fd, send_buffer, strlen(send_buffer) + 1, 0);
+        scanf("%s", send_buffer);
+    }
+
+    close(client_fd);
+    return 0;
+}
+```
+
+输出：
+
+```c++
+// client 端
+sean@sean-virtual-machine:~/xxxx/NetDemo$ ./client_poll 
+hi
+Let's do it
+close
+    
+// server 端
+sean@sean-virtual-machine:~/xxxx/NetDemo$ ./server_poll 
+New client came, local fd is [4]
+recv data [This is demo.] from local fd [4] 
+recv data [hi] from local fd [4] 
+recv data [Let's] from local fd [4] 
+recv data [do] from local fd [4] 
+recv data [it] from local fd [4] 
+recv data [close] from local fd [4]
+```
+
+另一个例子可参考：[poll](https://github.com/yuanrw/tcp-server-client/tree/master/poll); 
 
 #### epoll
 
@@ -1012,6 +1190,8 @@ struct pollfd {
 > LT和ET原本用于脉冲信号。Level和Edge指触发点；Level指：只要处于水平，就**一直触发**；Edge指：只有是上升沿和下降沿的时候才触发；比如：0 -> 1就是Edge, 1->1就是Level。（仅用于帮助理解）
 
 ET模式可以大大减少了`epoll`事件的触发次数，效率较高。
+
+`epoll`示例程序：参考[epoll](https://github.com/yuanrw/tcp-server-client/tree/master/epoll); 
 
 #### 小结
 
