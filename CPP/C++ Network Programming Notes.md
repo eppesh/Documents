@@ -109,11 +109,11 @@ The client and server can now communicate by writing to or reading from their so
 
 Definition:
 
-A *socket* is one endpoint of a two-way communication link between two programs running on the network. A socket is bound to a port number so that the TCP layer can identify the application that data is destined to be sent to.
+A *socket* is **one endpoint** of a two-way communication link between two programs running on the network. A socket is bound to a port number so that the TCP layer can identify the application that data is destined to be sent to.
 
 ------
 
-An endpoint is a combination of an IP address and a port number. Every TCP connection can be uniquely identified by its two endpoints. That way you can have multiple connections between your host and the server.
+An **endpoint** is a **combination of an IP address and a port number**. Every TCP connection can be uniquely identified by its two endpoints. That way you can have multiple connections between your host and the server.
 
 
 
@@ -646,19 +646,59 @@ The client-server model distinguishes between applications as well as devices. N
 For example, let's talk about telnet.
 When we connect to a remote host on port 23 with telnet (the client), a program on that host (called telnetd, the server) springs to life. It handles the incoming telnet connection, sets us up with a login prompt, etc.
 
-One server generally supports numerous clients, and multiple servers can be networked together in a pool to handle the increased processing load as the number of clients grows.
+One `server` generally supports numerous `clients`, and multiple servers can be networked together in a pool to handle the increased processing load as the number of clients grows.
 
 Some of the most popular applications on the Internet follow the client-server model including email, FTP and Web services. Each of these clients features a user interface and a client application that allows the user to connect to servers. In the case of email and FTP, users enter a computer name (or an IP address) into the interface to set up connections to the server.
 
-The steps to establish a socket on the server side are:
+The **steps** to establish a socket on the **server** side are:
 
-1. Create a socket with the socket() system call.
-2. The server process gives the socket a name. In linux file system, local sockets are given a filename, under /tmp or /usr/tmp directory. For network sockets, the filename will be a service identifier, port number, to which the clients can make connection. This identifier allows to route incoming connections (which has that the port number) to connect server process. A socket is named using bind() system call.
-3. The server process then waits for a client to connect to the named socket, which is basically listening for connections with the listen() system call. If there are more than one client are trying to make connections, the listen() system call make a queue.
+1. **Create a socket** with the socket() system call.
+
+   ```c++
+   #include <sys/socket.h>
+   int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+   ```
+
+2. The `server` process gives the socket a name. In linux file system, local sockets are given a filename, under `/tmp` or `/usr/tmp` directory. For network sockets, the filename will be a service identifier, port number, to which the clients can make connection. This identifier allows to route incoming connections (which has that the port number) to connect server process. **A socket is named** using `bind()` system call. 
+
+   用`bind()`将 `socket`和一个`Endpoint (IP + Port)`绑定；
+
+   ```c++
+   #include <arpa/inet.h>		// inet_ntoa()
+   #include <netinet/in.h>		// sockaddr_in;htons();
+   
+   sockaddr_in server_addr;
+   memset((char *)&server_addr, 0, sizeof(server_addr));
+   
+   server_addr.sin_family = AF_INET;
+   server_addr.sin_addr.s_addr = htonl(INADDR_ANY);// automatically be filled with current host's IP address
+   //server_addr.sin_addr.s_addr = inet_addr("127.0.0.1"); // 这两种方式均可
+   server_addr.sin_port = htons(8888);
+   
+   bind(sockfd, (sockaddr *)&server_addr, sizeof(server_addr)
+   ```
+
+3. The `server` process then waits for a `client` to **connect** to **the named socket**（Sean注：这个`socket`，即上面的`sockfd`，主要用于监听是否有客户端连接上来，因此可重命名为`listening_sockfd`）, which is basically listening for connections with the `listen()` system call. If there are more than one client are trying to make connections, the `listen()` system call make a queue.
    The machine receiving the connection (the server) must bind its socket object to a known port number. A port is a 16-bit number in the range 0-65535 that's managed by the operating system and used by clients to uniquely identify servers. Ports 0-1023 are reserved by the system and used by common network protocols.
-4. Accept a connection with the accept() system call. At accept(), a new socket is created that is distinct from the named socket. This new socket is used solely for communication with this particular client.
-   For TCP servers, the socket object used to receive connections is not the same socket used to perform subsequent communication with the client. In particular, the accept() system call returns a new socket object that's actually used for the connection. This allows a server to manage connections from a large number of clients simultaneously.
-5. Send and receive data.
+   
+4. **Accept** a connection with the `accept()` system call. At `accept()`, **a new socket** is created that is distinct from the named socket. This new socket is used solely for communication with this particular client.
+   For TCP servers, the socket object used to receive connections **is not the same socket** used to perform subsequent communication with the client. In particular, the `accept()` system call returns a new socket object that's actually used for the connection. This allows a server to manage connections from a large number of clients simultaneously.
+   
+   ```c++
+   sockaddr_in client_addr;	// 用于保存客户端的地址信息
+   socklen_t cliient_len = sizeof(client_addr);
+   memset((char *)&client_addr, 0, sizeof(client_addr));
+   
+   int new_sockfd = accept(sockfd, (sockaddr *)&client_addr, &cliient_len);
+   ```
+   
+   > Sean注：
+   >
+   > 1. 前面利用`socket()`创建并在`bind(), listen()`中使用的那个`socket`是监听的（`listening_sockfd`）；
+   > 2. 每个`connect()`成功后返回的`new_sockfd`就是这条`connection`的客户端的`socket`，即`client1_sockfd`；
+   
+5. **Send** and **receive** data.
+
 6. The named socket remains for further connections from other clients. A typical web server can take advantage of multiple connections. In other words, it can serve pages to many clients at once. But for a simple server, further clients wait on the listen queue until the server is ready again.
 
 The steps to establish a socket on the client side are:
@@ -699,8 +739,10 @@ int read (int fd,void *buf,int len)		// 从fd(file descriptor)中读取内容
 
 区别：
 
-- 头文件不同：send(), recv() 头文件是：`<sys/socket.h>`; write(), read() 头文件是：`<unistd.h>`; 
-- 参数不同：send(), recv() 多了第4个参数，用来控制读写操作；当flags=0时，功能同write(), read()一样；
+- 头文件不同：`send(), recv()` 头文件是：`<sys/socket.h>`; `write(), read()` 头文件是：`<unistd.h>`; 
+- 参数不同：`send(), recv()` 多了第4个参数，用来控制读写操作；当flags=0时，功能同`write(), read()`一样；
+
+`send(), recv(), write(), read()`用于TCP连接，在UDP中使用`sendto(), recvfrom()`；
 
 ## recv() & recvfrom()
 
@@ -734,6 +776,8 @@ Return Value:
 Returns the number of bytes actually recieved (which might be less than you requested in the `len` paramter), or `-1` on error (and `errno` will be set accordingly.)
 
 If the remote side has closed the connection, `recv()` will return `0`. This is the normal method for determining if the remote side has closed the connection. Normality is good, rebel! `if(recv() == 0) { // the connection has been closed}`
+
+> Sean注：常使用 `recv() == 0` 来判断 connection 是否已关闭；
 
 示例：
 
@@ -1272,3 +1316,35 @@ POSIX对这两个术语定义如下:
 - [理解Linux中的file descriptor(文件描述符)](https://wiyi.org/linux-file-descriptor.html); 
 - [Five IO models of Unix](https://developpaper.com/five-io-models-of-unix/);
 - [EPOLLET VS EPOLLLT](https://zhuanlan.zhihu.com/p/36977578); 
+
+# Programming Practice
+
+在编程实践中学习并总结相关知识点；
+
+参考资料：
+
+- [Github - 30天自制C++服务器](https://github.com/yuesong-feng/30dayMakeCppServer); 
+
+## 异常处理
+
+封装一个错误处理函数：
+
+```c++
+#include <cstdio>		// perror()
+#include <cstdlib>		// exit()
+
+// 如果 condition 为真,则打印错误信息
+void ErrorIf(bool condition, const char *error_msg)
+{
+    if (condition)
+    {
+        perror(error_msg);
+        exit(EXIT_FAILURE);
+    }
+}
+
+// 使用示例
+int listening_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+ErrorIf(listening_sockfd == -1, "socket create error");
+```
+
