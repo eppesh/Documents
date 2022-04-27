@@ -903,11 +903,11 @@ ssize_t recvfrom(int s, void *buf, size_t len, int flags,
 
 ![应用场景](https://pic4.zhimg.com/80/v2-529734ac694c4da96ac78eeebd7deb6b_720w.jpg)
 
-场景思考：应用B从TCP缓冲区读取数据。在并发环境下，可能会有`n`个人向应用B发送数据，此时应用B需要创建多个线程去读取数据，每个线程都会调用`recvfrom()`去读取数据。
+场景思考：应用B从TCP缓冲区读取数据。在并发环境下，可能会有`n`个人向应用B发送数据，此时应用B需要创建多个线程去读取数据，每个线程都会调用`recv()`去读取数据。
 
-并发情况下，B所在服务器很可能会瞬间收到上百万个请求消息，此时应用B就需要创建上百万个线程去读取数据；同时应用B不知道何时会有数据就绪，这些线程都会不断向内核发送`recvfrom()`请求来读取数据。
+并发情况下，B所在服务器很可能会瞬间收到上百万个请求消息，此时应用B就需要创建上百万个线程去读取数据；同时应用B不知道何时会有数据就绪，这些线程都会不断向内核发送`recv()`请求来读取数据。
 
-那么问题来了：如此多的线程不停调用`recvfrom()`请求数据，一来服务器可能扛不住，二来过于浪费线程资源。
+那么问题来了：如此多的线程不停调用`recv()`请求数据，一来服务器可能扛不住，二来过于浪费线程资源。
 
 对应解决思路：能否由一个线程监控多个网络请求（即`fd`,一个网络socket对应一个fd），这样就只需一个或少数线程就可以完成数据状态询问的操作，当有数据准备就绪后再分配对应线程去读取数据；这样可以节省大量线程资源，这就是I/O多路复用的思路。
 
@@ -915,7 +915,11 @@ ssize_t recvfrom(int s, void *buf, size_t len, int flags,
 
 **I/O多路复用思路**：
 
-系统提供一种函数，可以同时监控多个`fd`操作，这种函数就是常说的`select, poll, epoll`函数。一旦这种函数所监控的`fd`中有任何一个`fd`的数据准备就绪了，这种函数就会返回`readable`状态，应用程序再调用`recvfrom()`读取数据。
+系统提供一种函数，可以同时监控多个`fd`操作，这种函数就是常说的`select, poll, epoll`函数。一旦这种函数所监控的`fd`中有任何一个`fd`的数据准备就绪了，这种函数就会返回`readable`状态，应用程序再调用`recv()`读取数据。
+
+IO多路复用的基本思路是**事件驱动**。服务器可以保持多个客户端IO连接，当某个IO上有可读或可写事件发生时，表示该IO对应的客户端在请求服务器的某项服务，此时服务器响应该服务。[[高并发还得用epoll](https://github.com/yuesong-feng/30dayMakeCppServer/blob/main/day03-%E9%AB%98%E5%B9%B6%E5%8F%91%E8%BF%98%E5%BE%97%E7%94%A8epoll.md)]
+
+> 注：IO多路复用和多线程相似，但是不同的概念。前者针对IO接口，后者针对CPU。
 
 > 小结：通过`select, poll或epoll` 来监控多个`fd`, 而不用为每个`fd`创建一个对应的监控线程，从而节省线程资源。
 
@@ -928,7 +932,7 @@ It looks like the first and second steps are blocking operations, but `select` c
 
 注意：
 
-- 不论是`select, poll`还是`epoll`，都地导致进程**阻塞**；发起真正的I/O操作（如`recvfrom()`）时，进程也会阻塞。
+- 不论是`select, poll`还是`epoll`，都地导致进程**阻塞**；发起真正的I/O操作（如`recv()`）时，进程也会阻塞。
 
 - `/O Multiplexing`的**优点**在于：一次性可以监听大量的`fd`; 
 - `select, poll, epoll`并不是I/O操作，`read, recvfrom`这些才是。
@@ -967,7 +971,7 @@ typedef struct fd_set {
 优点：
 
 1. 几乎所有系统都支持`select`; 
-2. 可以一次上`kernel`监控多个`fd`; 
+2. 可以一次在`kernel`上监控多个`fd`; 
 
 缺点：
 
@@ -1179,6 +1183,9 @@ recv data [close] from local fd [4]
   ```c++
   #include <sys/epoll.h>
   int epoll_create1(int flags);
+  
+  // int epfd = epoll_create(1024); // 参数表示监听事件的大小，如超过内核会自动调整；已经被舍弃;无实际意义,传入一个大于0的数即可
+  int epfd = epoll_create1(0); // 参数flags一般设为0，详细参考 man epoll
   ```
 
 - `epoll_ctl()`: 操作`epoll`实例监听的`fd`，可往里面新增、删除`fd`; （即注册`fd`）
@@ -1194,7 +1201,7 @@ recv data [close] from local fd [4]
   } epoll_data_t;
   
   struct epoll_event {
-    uint32_t     events;      /* Epoll events */
+    uint32_t     events;      /* Epoll events; 如:EPOLLIN */
     epoll_data_t data;        /* User data variable */
   };
   ```
@@ -1202,9 +1209,19 @@ recv data [close] from local fd [4]
   - `epfd`: 即`epoll_create1()`返回的`fd`; 
   - `op`: `operation`的缩写，可以是`EPOLL_CTL_ADD, EPOLL_CTL_MOD, EPOLL_CTL_DEL`; 
   - `fd`: 即要监听的`fd`; 
-  - `event`: 即要注册的事件集合（可读，可写等）；
+  - `event`: 即要注册的事件集合（可读，可写等; ）；
 
-- `epoll_wait()`: 等待`epoll`实例中有`fd`就绪，且返回就绪的`fd`.
+  `epoll`监听事件的`fd`会放在一颗红黑树上，将要监听的IO接口放入`epoll`红黑树中，就可以监听该IO上的事件。
+
+  ```c++
+  epoll_ctl(epfd, EPOLL_CTL_ADD, sockfd, &ev);		// 添加事件到epoll
+  epoll_ctl(epfd, EPOLL_CTL_MOD, sockfd, &ev);		// 修改epoll红黑树上的事件
+  epoll_ctl(epfd, EPOLL_CTL_DEL, sockfd, nullptr);	// 删除事件
+  ```
+
+  
+
+- `epoll_wait()`: 用来获取有事件发生的`fd`；等待`epoll`实例中有`fd`就绪，且返回就绪的`fd`的数量.
 
   ```c++
   int epoll_wait(int epfd, struct epoll_event *events,int maxevents, int timeout);
@@ -1214,14 +1231,14 @@ recv data [close] from local fd [4]
 
   - `epfd`: 即`epoll_create1()`返回的`fd`; 
   - `events`: 就绪的`fd`会放在这里；
-  - `maxevents`: 最大的事件数量；
-  - `timeout`: 超时时间；
+  - `maxevents`: 可供返回的最大的事件数量，一般是`events`的最大数量；
+  - `timeout`: 超时时间，设置为-1表示一直等特；
 
 **水平触发&边缘触发**：
 
 `epoll`有`LT`和`ET`两种模式；
 
-- 水平触发（LevelTriggered, **LT**): 默认工作模式；`socket`缓冲区`有数据可读`/`没满可写`时，`可读`/`可写`事件一直触发，`epoll_wait()`会一直触发返回（直到缓冲区数据被读取完毕/写满，或者`socket`不再处于`readable/writeable`状态）。（即当`epoll_wait()`监听到某`fd`事件就绪并通知应用程序时，应用程序可以不立即处理该事件；下次调用`epoll_wait()`时，会再次通知此事件。）
+- 水平触发（LevelTriggered, **LT**): **默认**工作模式；`socket`缓冲区`有数据可读`/`没满可写`时，`可读`/`可写`事件一直触发，`epoll_wait()`会一直触发返回（直到缓冲区数据被读取完毕/写满，或者`socket`不再处于`readable/writeable`状态）。（即当`epoll_wait()`监听到某`fd`事件就绪并通知应用程序时，应用程序可以不立即处理该事件；下次调用`epoll_wait()`时，会再次通知此事件。）
 
   > `select()`和`poll()`属于水平触发；
   >
@@ -1229,13 +1246,17 @@ recv data [close] from local fd [4]
 
 - 边缘触发（Edge Triggered, **ET**): 只在状态改变（**状态从未就绪变为就绪**）时才触发事件（可理解为，只有新的数据到来时才会触发）；即当`epoll_wait()`监听到某`fd`事件就绪并通知应用程序时，应用程序必须立即处理该事件；如果不处理，下次调用`epoll_wait()`时，也不会再通知此事件。故：该模式下，有数据时必须循环读取完全部数据，直到`read`返回值小于请求值，或遇到`EAGAIN`错误。
 
+  优缺点：高效，提高并发度；程序逻辑必须一次性处理好该`fd`上的事件；
+  
+  ET模式必须搭配**非阻塞**式`socket`使用。
+  
   > 例子：当发送方速率很快，一次可能发送`n`个`msg1`消息包，但接收方只会触发一次`EPOLLIN`(The associated file is available for read operations.) ; 这时，接收方如果不把这`n`个`msg1`消息都处理完毕，那么当发送方再发送另一个`msg2`消息时，接收方触发后处理的还是`msg1`，而`msg2`的消息就无法及时处理而造成**消息处理延迟**；因此，**ET**模式要求，每次触发时都要**全部读取**。
 
 > LT和ET原本用于脉冲信号。Level和Edge指触发点；Level指：只要处于水平，就**一直触发**；Edge指：只有是上升沿和下降沿的时候才触发；比如：0 -> 1就是Edge, 1->1就是Level。（仅用于帮助理解）
 
 ET模式可以大大减少了`epoll`事件的触发次数，效率较高。
 
-`epoll`示例程序：参考[epoll](https://github.com/yuanrw/tcp-server-client/tree/master/epoll); 
+`epoll`示例程序：参考下文的“[epoll版 Echo Server](#epoll 版 Echo Server)"; 或参考[epoll](https://github.com/yuanrw/tcp-server-client/tree/master/epoll); 
 
 #### 小结
 
@@ -1346,5 +1367,736 @@ void ErrorIf(bool condition, const char *error_msg)
 // 使用示例
 int listening_sockfd = socket(AF_INET, SOCK_STREAM, 0);
 ErrorIf(listening_sockfd == -1, "socket create error");
+```
+
+## Echo Server
+
+编写一个简单的回声服务器，即服务端将客户端发来的数据原封不动地发送回去。
+
+util.h, util.cpp:
+
+```c++
+// 名称：util.h
+// 版权：仅供学习
+// 作者：Sean (eppesh@163.com)
+// 环境：VS2019
+// 时间：04/26/2022
+// 说明：工具类,包含常用辅助函数;
+
+#ifndef UTIL_H_
+#define UTIL_H_
+
+#include <cstdio>
+#include <cstdlib>
+
+// 条件condition为true时输出错误信息error_msg
+void ErrorIf(bool condition, const char *error_msg);
+
+#endif
+
+///////////////////////////////
+// util.cpp
+#include "util.h"
+
+void ErrorIf(bool condition, const char *error_msg)
+{
+    if (condition)
+    {
+        perror(error_msg);
+        exit(EXIT_FAILURE);
+    }
+}
+```
+
+Makefile文件：
+
+```shell
+.PHONY : clean 
+server : 
+	g++ util.cpp client.cpp -o client && \
+	g++ util.cpp server.cpp -o server
+
+clean :
+	rm server && rm client
+```
+
+server.cpp:
+
+```c++
+// 名称：server.cpp
+// 版权：仅供学习
+// 作者：Sean (eppesh@163.com)
+// 环境：VS2019
+// 时间：04/26/2022
+// 说明：服务端
+
+#include <arpa/inet.h>
+#include <cstring>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include "util.h"
+
+int main()
+{
+    int listening_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    ErrorIf((listening_sockfd == -1), "socket create error");
+
+    sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    server_addr.sin_port = htons(8888);
+
+    ErrorIf((bind(listening_sockfd, (sockaddr *)&server_addr, sizeof(server_addr)) == -1), "socket bind error");
+
+    ErrorIf((listen(listening_sockfd, SOMAXCONN) == -1), "socket listen error");
+
+    sockaddr_in client_addr;
+    memset(&client_addr, 0, sizeof(client_addr));
+    socklen_t client_addr_len = sizeof(client_addr);
+    
+    int client_sockfd = accept(listening_sockfd, (sockaddr *)&client_addr, &client_addr_len);
+    ErrorIf((client_sockfd == -1), "socket accept error");
+
+    printf("new client fd[%d]! IP: %s Port: %d\n", client_sockfd, inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+
+    while (true)
+    {
+        char buf[1024] = { 0 };
+        ssize_t read_bytes = read(client_sockfd, buf, sizeof(buf));
+        if (read_bytes > 0)
+        {
+            printf("message from client fd[%d]: %s\n", client_sockfd, buf);
+            write(client_sockfd, buf, sizeof(buf));
+        }
+        else if (read_bytes == 0)
+        {
+            printf("client fd[%d] disconnected\n", client_sockfd);
+            close(client_sockfd);
+            break;
+        }
+        else if (read_bytes == -1)
+        {
+            close(client_sockfd);
+            ErrorIf(true, "socket read error");
+        }
+    }
+
+    close(listening_sockfd);
+    return 0;
+}
+```
+
+client.cpp:
+
+```c++
+// 名称：client.cpp
+// 版权：仅供学习
+// 作者：Sean (eppesh@163.com)
+// 环境：VS2019
+// 时间：04/26/2022
+// 说明：客户端
+
+#include <arpa/inet.h>
+#include <cstring>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <netinet/in.h>
+#include <unistd.h>
+
+#include "util.h"
+
+int main()
+{
+    int sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    ErrorIf((sockfd == -1), "socket create error");
+
+    sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    server_addr.sin_port = htons(8888);
+
+    ErrorIf((connect(sockfd, (sockaddr *)&server_addr, sizeof(server_addr)) == -1), "socket connect error");
+
+    while (true)
+    {
+        char buf[1024] = { 0 };
+        scanf("%s", buf);
+        ssize_t write_bytes = write(sockfd, buf, sizeof(buf));
+        if (write_bytes == -1)
+        {
+            printf("socket already disconnected, can't write any more!\n");
+            break;
+        }
+
+        memset(buf, 0, sizeof(buf));
+        ssize_t read_bytes = read(sockfd, buf, sizeof(buf));
+        if (read_bytes > 0)
+        {
+            printf("message from server: %s\n", buf);
+        }
+        else if (read_bytes == 0)
+        {
+            printf("server socket disconnected!\n");
+            break;
+        }
+        else if (read_bytes == -1)
+        {
+            close(sockfd);
+            ErrorIf(true, "socket read error");
+        }
+    }
+
+    close(sockfd);
+    return 0;
+}
+```
+
+## epoll 版 Echo Server
+
+使服务器可以接收**多个客户端**连接。
+
+改进思路：
+
+- 创建完服务器的监听`fd`-`listening_sockfd`后，将之添加到`epoll`中，只要这个`fd`上发生可读事件，表示有一个新的客户端连接。
+- 每次`accept`一个客户端就把该客户端的`fd` - `client_sockfd`添加到`epoll`，`epoll`会监听`client_sockfd`是否有事件发生，如果发生则处理事件。
+
+`fcntl`是Linux上的系统调用，用来对已打开的文件描述符`fd`进行各种控制操作，用以改变已打开文件的各种属性（如复制文件描述符，设置非阻塞，加读写锁等）。经常用来**设置非阻塞、加读写锁**。
+
+```c++
+#include <fcntl.h>
+int fcntl(int fd, int cmd, ... /* arg */);
+```
+
+`cmd`命令：
+
+- `F_DUPFD`: 复制文件描述符；与`dup`函数功能一样，复制由`fd`指向的文件描述符，调用成功后返回新的文件描述符，与旧的`fd`共同指向同一个文件。
+- `F_GETFD`: 获取`fd`的标志（如`close-on-exec`标志）；[[CSDN-fd标志和fd状态标志](https://blog.csdn.net/kyang_823/article/details/79496362)]
+- `F_SETFD`: 设置`fd`的标志（如将文件描述符`close-on-exec`标志设置为第三个参数`arg`的最后一位）；
+- `F-GETFL`: 获取`fd`的状态标志；
+- `F_SETFL`: 设置`fd`的状态标志；
+- `F_GETLK`: 获取文件锁；
+- `F_SETLK`: 设置文件锁；
+
+**设置非阻塞**：先把`fd`对应的标志读出来，再加上非阻塞标志`O_NONBLOCK`，再设置回去。
+
+添加标志用**或运算(`|`)**，清除标志用**按位取反后的与运算**；
+
+```c++
+int flags = fcntl(fd, F_GETFL);
+// 设置非阻塞
+flags |= O_NONBLOCK;
+fcntl(fd, F_SETFL, flags);
+printf("flags: %#x \n", flags);
+// 清除非阻塞标志
+flags &= ~O_NONBLOCK;
+fcntl(fd, F_SETFL, flags);
+printf("flags: %#x \n", flags);
+```
+
+server.cpp:
+
+```c++
+// 名称：server.cpp
+// 版权：仅供学习
+// 作者：Sean (eppesh@163.com)
+// 环境：VS2019
+// 时间：04/26/2022
+// 说明：服务端
+
+#include <arpa/inet.h>
+#include <cstring>
+#include <cerrno>
+#include <fcntl.h>				// fcntl
+#include <netinet/in.h>
+#include <sys/epoll.h>          // epoll
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include "util.h"
+
+const int kMaxEvents = 1024;
+const int kReadBuffer = 1024;
+
+void SetNonBlocking(int fd)
+{
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+}
+
+int main()
+{
+    int listening_sockfd = socket(AF_INET, SOCK_STREAM, 0);
+    ErrorIf((listening_sockfd == -1), "socket create error");
+
+    sockaddr_in server_addr;
+    memset(&server_addr, 0, sizeof(server_addr));
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    server_addr.sin_port = htons(8888);
+
+    ErrorIf((bind(listening_sockfd, (sockaddr *)&server_addr, sizeof(server_addr)) == -1), "socket bind error");
+    ErrorIf((listen(listening_sockfd, SOMAXCONN) == -1), "socket listen error");
+
+    int epfd = epoll_create1(0);
+    ErrorIf((epfd == -1), "epoll create error");
+
+    epoll_event events[kMaxEvents];
+    epoll_event ev;
+    memset(&events, 0, sizeof(events));
+    memset(&ev, 0, sizeof(ev));
+    ev.data.fd = listening_sockfd;
+    ev.events = EPOLLIN | EPOLLET;      // 此处使用了ET模式，且未处理错误；后续会修复，因为接受连接最好不用ET模式
+    SetNonBlocking(listening_sockfd);
+    epoll_ctl(epfd, EPOLL_CTL_ADD, listening_sockfd, &ev);
+
+    while (true)    // 不断监听epoll上的事件并处理
+    {
+        int nfds = epoll_wait(epfd, events, kMaxEvents, -1);        // 有nfds个fd发生事件
+        ErrorIf((nfds == -1), "epoll wait error");
+
+        for (int i = 0; i < nfds; ++i)  // 处理这nfds个事件
+        {
+            if (events[i].data.fd == listening_sockfd)  // 发生事件的fd是服务器的监听fd(listening_sockfd)，表示有新客户端连接
+            {
+                sockaddr_in client_addr;
+                memset(&client_addr, 0, sizeof(client_addr));
+                socklen_t client_addr_len = sizeof(client_addr);
+
+                int client_sockfd = accept(listening_sockfd, (sockaddr *)&client_addr, &client_addr_len);
+                ErrorIf((client_sockfd == -1), "socket accept error");
+                printf("new client fd[%d]! IP: %s Port: %d\n", client_sockfd, inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port));
+
+                memset(&ev, 0, sizeof(ev));
+                ev.data.fd = client_sockfd;
+                ev.events = EPOLLIN | EPOLLET;                              // 对于客户端连接，使用ET模式，可以让epoll更高效，支持更多并发
+                SetNonBlocking(client_sockfd);                              // ET模式要搭配非阻塞socket使用
+                epoll_ctl(epfd, EPOLL_CTL_ADD, client_sockfd, &ev);         // 将该客户端fd添加到epoll
+            }
+            else if (events[i].events & EPOLLIN)    // 发生事件的是客户端，并且是可读事件
+            {
+                char buf[kReadBuffer] = { 0 };
+                while (true)    // 由于使用非阻塞IO，读取客户端buffer时，需要不断读取，一次读取buf大小数据，直到全部读取完毕
+                {
+                    memset(buf, 0, sizeof(buf));
+                    ssize_t read_bytes = read(events[i].data.fd, buf, sizeof(buf));
+                    if (read_bytes > 0)
+                    {
+                        printf("message from client fd[%d]: %s\n", events[i].data.fd, buf);
+                        write(events[i].data.fd, buf, sizeof(buf));
+                    }
+                    else if (read_bytes == -1 && errno == EINTR)        // 客户端正常中断，继续读取
+                    {
+                        printf("continue reading");
+                        continue;
+                    }
+                    else if (read_bytes == -1 && ((errno == EAGAIN) || (errno == EWOULDBLOCK)))         // 非阻塞IO，这个条件表示数据全部读取完毕
+                    {
+                        printf("finish reading once, errno: %d\n", errno);
+                        break;
+                    }
+                    else if (read_bytes == 0)                           // EOF, 客户端断开连接
+                    {
+                        printf("EOF, client fd[%d] disconnected\n", events[i].data.fd);
+                        close(events[i].data.fd);       // 关闭socket会自动将文件描述符从epoll树上移除
+                        break;
+                    }
+                    else
+                    {
+                        // 其他 read_bytes == -1 的情况处理
+                    }
+                }// while
+            }
+            else    // 其他事件
+            {
+                printf("something else happened\n");
+            }
+        } // end of for
+    } // end of while
+
+    close(listening_sockfd);
+    return 0;
+}
+```
+
+client.cpp: 基本没变化，只是新增了一个全局变量替换之前的1024.
+
+```c++
+const int kBufferSize = 1024;
+char buf[kBufferSize] = { 0 };
+```
+
+client端需要注意：发送的`buf`大小必须**大于等于**服务器端`buf`大小，不然会出错（因为服务器端使用`epoll`的ET模式与客户端连接，从客户端读取数据时需要一次性读取完;如果当前客户端的`buf`小于服务器端的`buf`大小，服务器读取时就会越界）。
+
+## 封装epoll版Echo Server
+
+将上面`epoll`版的`Echo Server`封装成相应类。
+
+- 更新`Makefile`文件：
+
+```shell
+.PHONY : clean rebuild
+server : 
+	g++ -o client util.cpp client.cpp && \
+	g++ -o server util.cpp server.cpp epoll.cpp inet_address.cpp socket.cpp
+ 
+clean :
+	rm server && rm client
+
+rebuild :
+	clean server
+```
+
+添加了`rebuild`，这样输入`make rebuild`命令就可以先清除旧文件再重新编译构建。
+
+- 新建`Epoll`类，位于`epoll.h, epoll.cpp`中；
+
+```c++
+// epoll.h
+#ifndef EPOLL_H_
+#define EPOLL_H_
+#include <cstring>
+#include <sys/epoll.h>
+#include <unistd.h>
+#include <vector>
+#include "util.h"
+const int kMaxEvents = 1000;
+class Epoll
+{
+private:
+    int epfd_;                      // epoll 实例
+    epoll_event *events_;
+public:
+    Epoll();
+    ~Epoll();
+    void AddFd(int fd, uint32_t operation);                 // 添加fd
+    std::vector<epoll_event> Poll(int timeout = -1);        // 返回就绪的fd
+};
+#endif
+
+// epoll.cpp
+#include "epoll.h"
+Epoll::Epoll() :epfd_(-1), events_(nullptr)
+{
+    epfd_ = epoll_create1(0);
+    ErrorIf((epfd_ == -1), "epoll create error");
+    events_ = new epoll_event[kMaxEvents];
+    ErrorIf((events_ == nullptr), "new epoll_event error");
+    memset(events_, 0, sizeof(*events_) * kMaxEvents);
+}
+Epoll::~Epoll()
+{
+    if (epfd_ != -1)
+    {
+        close(epfd_);
+        epfd_ = -1;
+    }
+    if (events_ != nullptr)
+    {
+        delete[] events_;
+        events_ = nullptr;
+    }
+}
+void Epoll::AddFd(int fd, uint32_t operation)
+{
+    epoll_event ev;
+    memset(&ev, 0, sizeof(ev));
+    ev.data.fd = fd;
+    ev.events = operation;
+    ErrorIf((epoll_ctl(epfd_, EPOLL_CTL_ADD, fd, &ev) == -1), "epoll add event error");
+}
+std::vector<epoll_event> Epoll::Poll(int timeout /* = -1 */)
+{
+    std::vector<epoll_event> active_events;
+    int nfds = epoll_wait(epfd_, events_, kMaxEvents, timeout);
+    ErrorIf((nfds == -1), "epoll wait error");
+
+    for (int i = 0; i < nfds; ++i)
+    {
+        active_events.push_back(events_[i]);
+    }
+    return active_events;
+}
+```
+
+- 新建`Socket`类，位于`socket.h, socket.cpp`中；
+
+```c++
+// socket.h
+#ifndef SOCKET_H_
+#define SOCKET_H_
+
+#include <cstdio>
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include "inet_address.h"
+#include "util.h"
+
+class InetAddress;
+
+class Socket
+{
+private:
+    int sockfd_;
+
+public:
+    Socket();
+    Socket(int sockfd);
+    ~Socket();
+
+    void Bind(InetAddress *address);                // 绑定IP和Port
+    void Listen();                                  // 监听
+    void SetNonBlocking();                          // 设置为非阻塞
+
+    int Accept(InetAddress *address);               // 接受连接,返回客户端fd
+    int GetFd();                                    // 获取fd
+};
+
+#endif
+
+// socket.cpp
+#include "socket.h"
+
+Socket::Socket() :sockfd_(-1)
+{
+    sockfd_ = socket(AF_INET, SOCK_STREAM, 0);
+    ErrorIf((sockfd_ == -1), "socket create error");
+}
+
+Socket::Socket(int sockfd) :sockfd_(sockfd)
+{
+    ErrorIf((sockfd_ == -1), "socket create error");
+}
+
+Socket::~Socket()
+{
+    if (sockfd_ != -1)
+    {
+        close(sockfd_);
+        sockfd_ = -1;
+    }
+}
+
+void Socket::Bind(InetAddress *address)
+{
+    ErrorIf(bind(sockfd_, (sockaddr *)&address->address_, address->address_len_) == -1, "socket bind error");
+}
+
+void Socket::Listen()
+{
+    ErrorIf(listen(sockfd_, SOMAXCONN) == -1, "socket listen error");
+}
+
+void Socket::SetNonBlocking()
+{
+    fcntl(sockfd_, F_SETFL, fcntl(sockfd_, F_GETFL) | O_NONBLOCK);
+}
+
+int Socket::Accept(InetAddress *address)
+{
+    int client_sockfd = accept(sockfd_, (sockaddr *)&address->address_, &address->address_len_);
+    ErrorIf((client_sockfd == -1), "socket accept error");
+    return client_sockfd;
+}
+
+int Socket::GetFd()
+{
+    return sockfd_;
+}
+```
+
+- 新建`InetAddress`类，位于`inet_address.h, inet_address.cpp`中；
+
+```c++
+// inet_address.h
+#ifndef INET_ADDRESS_H_
+#define INET_ADDRESS_H_
+
+#include <arpa/inet.h>
+#include <cstring>
+
+class InetAddress
+{
+public:
+    sockaddr_in address_;
+    socklen_t address_len_;
+
+public:
+    InetAddress();
+    InetAddress(const char *ip, uint16_t port);
+    ~InetAddress();
+};
+
+#endif
+
+// inet_address.cpp
+#include "inet_address.h"
+
+InetAddress::InetAddress() :address_len_(sizeof(address_))
+{
+    memset(&address_, 0, sizeof(address_));
+}
+
+InetAddress::InetAddress(const char *ip, uint16_t port) : address_len_(sizeof(address_))
+{
+    memset(&address_, 0, sizeof(address_));
+    address_.sin_family = AF_INET;
+    address_.sin_addr.s_addr = inet_addr(ip);
+    address_.sin_port = htons(port);
+}
+
+InetAddress::~InetAddress()
+{
+
+}
+```
+
+- client.cpp未改动；server.cpp有变化:
+
+```c++
+#include <arpa/inet.h>
+#include <cstring>
+#include <cerrno>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/epoll.h>          // epoll
+#include <sys/socket.h>
+#include <unistd.h>
+
+#include "epoll.h"
+#include "inet_address.h"
+#include "socket.h"
+#include "util.h"
+
+const int kReadBuffer = 1024;
+
+void SetNonBlocking(int fd)
+{
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+}
+
+void HandleReadEvent(int sockfd);
+
+int main()
+{
+    Socket *server_socket = new Socket();
+    InetAddress *server_address = new InetAddress("127.0.0.1", 8888);
+    server_socket->Bind(server_address);
+    server_socket->Listen();
+
+    Epoll *ep = new Epoll();
+    server_socket->SetNonBlocking();
+    ep->AddFd(server_socket->GetFd(), EPOLLIN | EPOLLET);
+
+    while (true)
+    {
+        std::vector<epoll_event> events = ep->Poll();
+        int nfds = events.size();
+        for (int i = 0; i < nfds; ++i)
+        {
+            if (events[i].data.fd == server_socket->GetFd())    // 发生事件的fd是服务器的监听fd(listening_sockfd)，表示有新客户端连接
+            {
+                InetAddress *client_addr = new InetAddress();                           // TODO: 记得内存释放
+                Socket *client_socket = new Socket(server_socket->Accept(client_addr)); // TODO: 记得内存释放
+                printf("new client fd[%d]! IP: %s Port: %d\n", client_socket->GetFd(), inet_ntoa(client_addr->address_.sin_addr), ntohs(client_addr->address_.sin_port));
+                
+                client_socket->SetNonBlocking();
+                ep->AddFd(client_socket->GetFd(), EPOLLIN | EPOLLET);
+            }
+            else if (events[i].events & EPOLLIN)        // 发生事件的是客户端，并且是可读事件
+            {
+                HandleReadEvent(events[i].data.fd);
+            }
+            else
+            {
+                printf("something else happened\n");
+            }
+        }
+    } // end of while
+
+    if (server_socket != nullptr)
+    {
+        delete server_socket;
+        server_socket = nullptr;
+    }
+    if (server_address != nullptr)
+    {
+        delete server_address;
+        server_address = nullptr;
+    }
+    if (ep != nullptr)
+    {
+        delete ep;
+        ep = nullptr;
+    }
+    return 0;
+}
+
+void HandleReadEvent(int sockfd)
+{
+    char buf[kReadBuffer] = { 0 };
+    while (true)    // 由于使用非阻塞IO，读取客户端buffer时，需要不断读取，一次读取buf大小数据，直到全部读取完毕
+    {
+        memset(buf, 0, sizeof(buf));
+        ssize_t read_bytes = read(sockfd, buf, sizeof(buf));
+        if (read_bytes > 0)
+        {
+            printf("message from client fd[%d]: %s\n", sockfd, buf);
+            write(sockfd, buf, sizeof(buf));
+        }
+        else if (read_bytes == -1 && errno == EINTR)        // 客户端正常中断，继续读取
+        {
+            printf("continue reading");
+            continue;
+        }
+        else if (read_bytes == -1 && ((errno == EAGAIN) || (errno == EWOULDBLOCK)))         // 非阻塞IO，这个条件表示数据全部读取完毕
+        {
+            printf("finish reading once, errno: %d\n", errno);
+            break;
+        }
+        else if (read_bytes == 0)                           // EOF, 客户端断开连接
+        {
+            printf("EOF, client fd[%d] disconnected\n", sockfd);
+            close(sockfd);       // 关闭socket会自动将文件描述符从epoll树上移除
+            break;
+        }
+        else
+        {
+            // 其他 read_bytes == -1 的情况处理
+        }
+    }
+}
+```
+
+## epoll高级用法--Channel
+
+回顾`epoll`的用法：我们把关心的`fd`注册到内核中`epfd`标识的事件表（红黑树）中，当该`fd`上有我们关心的事件发生时，拿到该`fd`并处理就绪的事件。
+
+试想这样一个情景：一台服务器可以同时提供不同类型的服务，如既可以提供HTTP服务，也能提供FTP服务等。当一个`clientfd`上发生了可读事件，我们虽然拿到了该`clientfd`的`fd`，但是后面应该按照”HTTP服务“的应答逻辑去处理该事件呢，还是按照”FTP服务“的应答逻辑去处理该事件？因为不同的连接类型（这条`socket`连接可能是HTTP服务的连接，也可能是FTP服务的连接）常常对应不同的处理逻辑，而我们仅仅依靠`epoll_wait`返回的`clientfd`（一个`int`型的值）是不足以区分该`fd`属于什么连接类型的，因此我们希望从`epoll_wait`的返回结果中获取更多关于该`clientfd`的信息（如：知道这个`fd`对应的是什么类型的连接等）。
+
+关于`epoll`的一些结构体：
+
+```c++
+typedef union epoll_data 
+{
+	void        *ptr;
+  	int          fd;
+  	uint32_t     u32;
+  	uint64_t     u64;
+} epoll_data_t;
+
+struct epoll_event 
+{
+	uint32_t     events;      /* Epoll events; 如:EPOLLIN */
+  	epoll_data_t data;        /* User data variable */
+};
+
+int epfd = epoll_create1(0);
+int epoll_ctl(int epfd, int operation, int fd, struct epoll_event *event);
+int epoll_wait(int epfd, struct epoll_event *events,int maxevents, int timeout);
 ```
 
