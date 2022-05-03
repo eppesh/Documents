@@ -2100,3 +2100,643 @@ int epoll_ctl(int epfd, int operation, int fd, struct epoll_event *event);
 int epoll_wait(int epfd, struct epoll_event *events,int maxevents, int timeout);
 ```
 
+Sean注：这里使用`Channel`类来封装`fd`，类似`ClockIn`项目中的`GridInfo`结构体，其实也就是`fd`与`Channel`一个对应关系；
+
+> 可以结合这个 [EventBase类](https://blog.csdn.net/silence1772/article/details/83307716) 来理解，这个`EventBase`就是每个`fd`对应的相关事件和事件处理函数，在`Epoll`类中用一个`map`把`fd`和`EventBase`映射起来。
+
+在`epoll_wait()`中返回的`events`就是已就绪的事件集(可以记为`active_events`，包括事件名`active_events[i].events`和数据`active_events[i].data`)。
+
+没使用`Channel`类前，我们是返回一个`std::vector<epoll_event> active_events`，主要使用`active_events[i].data.fd`这个`int`型的值; 
+
+而使用`Channel`类后，是返回一个`Channel *active_events=new Channel[kMaxEvens]`数组指针，这次主要使用`active_events[i].data.ptr`这个指针。
+
+> 疑问：明白这里想用Channel来代替之前的fd，但`active_events[i].data.ptr`指向的内容是什么，有多长，可以直接转换成`Channel *`吗？需要读内存验证下。
+>
+> 为何不直接做一个类似`std::map<int fd, Channel channel>`的映射？
+
+除下面这些文件有改动外，其他文件未做修改：
+
+- 更新`Makefile`：添加`channel.cpp`；
+
+- 添加`Channel`类，位于`channel.h, channel.cpp`文件中；
+
+  ```c++
+  // 名称：channel.h
+  // 版权：仅供学习
+  // 作者：Sean (eppesh@163.com)
+  // 环境：VS2019
+  // 时间：04/28/2022
+  // 说明：Channel类; 把fd封装成Channel类;一个fd对应一个Channel类(之前是将fd添加到epoll的事件表/红黑树中,现在是把Channel添加进去)；该类中包含该fd关心的事件以及事件处理函数
+  
+  #ifndef CHANNEL_H_
+  #define CHANNEL_H_
+  
+  #include <sys/epoll.h>
+  
+  #include "epoll.h"
+  
+  class Epoll;
+  
+  class Channel
+  {
+  private:
+      Epoll *epfd_;                                           // 内核中 epoll 事件表的标识
+      int fd_;                                                // 该socket对应的fd
+      uint32_t events_;                                       // 关注的事件
+      uint32_t revents_;                                      // 返回的活跃事件; 当有事件发生时，发生的事件类型会写到revents_中,然后就可以根据这个值来决定执行哪个处理函数
+      bool in_epoll_;                                         // 当前Channel是否已经在epoll的事件表（红黑树）中;(可理解为该Channel一一对应的fd是否已经在epoll的事件表中)
+  
+  public:
+      Channel(Epoll *epfd, int fd);
+      ~Channel();
+  
+      void EnableReadEvents();                                // 关注可读事件
+  
+      int GetFd();
+      uint32_t GetEvents();
+      uint32_t GetRevents();
+      void SetRevents(uint32_t revents);
+      bool GetInEpoll();
+      void SetInEpoll();
+  };
+  #endif
+  
+  // channel.cpp
+  #include "channel.h"
+  
+  Channel::Channel(Epoll *epfd, int fd) :epfd_(epfd), fd_(fd), events_(0), revents_(0), in_epoll_(false)
+  {
+  }
+  
+  Channel::~Channel()
+  {
+  }
+  
+  void Channel::EnableReadEvents()
+  {
+      events_ = EPOLLIN | EPOLLET;    // events_ |= (EPOLLIN | EPOLLET); 是否更合理？
+      epfd_->UpdateChannel(this);
+  }
+  
+  int Channel::GetFd()
+  {
+      return fd_;
+  }
+  
+  uint32_t Channel::GetEvents()
+  {
+      return events_;
+  }
+  
+  uint32_t Channel::GetRevents()
+  {
+      return revents_;
+  }
+  
+  void Channel::SetRevents(uint32_t ev)
+  {
+      revents_ = ev;
+  }
+  
+  bool Channel::GetInEpoll()
+  {
+      return in_epoll_;
+  }
+  
+  void Channel::SetInEpoll()
+  {
+      in_epoll_ = true;
+  }
+  ```
+
+- 更新`Epoll`类，包括`epoll.h, epoll.cpp`文件：
+
+  ```c++
+  // epoll.h
+  #ifndef EPOLL_H_
+  #define EPOLL_H_
+  #include <cstring>
+  #include <sys/epoll.h>
+  #include <unistd.h>
+  #include <vector>
+  #include "channel.h"
+  #include "util.h"
+  const int kMaxEvents = 1000;
+  class Channel;
+  class Epoll
+  {
+  private:
+      int epoll_fd_;                                          // epoll自身的fd，用来唯一标识内核中的epoll事件表(红黑树)
+      epoll_event *active_events_;                            // 传给epoll_wait()的参数,epoll_wait()将会把就绪的事件写入到该参数中返回给用户;此处用的是epoll_event数组的指针,也可以用std::vector<epoll_event> active_events_;
+  
+  public:
+      Epoll();
+      ~Epoll();
+  
+      void AddFd(int fd, uint32_t events);                    // 向事件表中注册/添加关心的fd和事件
+      void UpdateChannel(Channel *channel);                   // 向事件表中add,modify关心的Channel(即fd)
+      //std::vector<epoll_event> Poll(int timeout = -1);      // 返回就绪的fd
+      std::vector<Channel *> Poll(int timeout = -1);          // 轮询并返回就绪的Channel
+  };
+  #endif
+  
+  // epoll.cpp
+  #include "epoll.h"
+  // 修改部分如下
+  std::vector<Channel *> Epoll::Poll(int timeout /* = -1 */)
+  {
+      std::vector<Channel *> active_channels;
+      int nfds = epoll_wait(epoll_fd_, active_events_, kMaxEvents, timeout);
+      ErrorIf((nfds == -1), "epoll wait error");
+  
+      for (int i = 0; i < nfds; ++i)
+      {
+          Channel *channel = (Channel *)active_events_[i].data.ptr;
+          channel->SetRevents(active_events_[i].events);
+          active_channels.push_back(channel);
+      }
+      return active_channels;
+  }
+  
+  void Epoll::UpdateChannel(Channel *channel)
+  {
+      int fd = channel->GetFd();
+      epoll_event ev;
+      memset(&ev, 0, sizeof(ev));
+      ev.data.ptr = channel;
+      ev.events = channel->GetEvents();
+      if (!channel->GetInEpoll())         // 该channel/fd还不在epoll的事件表中(还未注册)
+      {
+          ErrorIf((epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, fd, &ev) == -1), "epoll add error");
+          channel->SetInEpoll();
+      }
+      else
+      {
+          ErrorIf((epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev) == -1), "epoll modify error");
+      }
+  }
+  ```
+
+- 更新`server.cpp`: (只有`main()`做了相应修改)
+
+  ```c++
+  #include "channel.h"
+  int main()
+  {
+      Socket *server_socket = new Socket();
+      InetAddress *server_address = new InetAddress("127.0.0.1", 8888);
+      server_socket->Bind(server_address);
+      server_socket->Listen();
+  
+      Epoll *epoll_fd = new Epoll();
+      server_socket->SetNonBlocking();
+  
+      Channel *listen_channel = new Channel(epoll_fd, server_socket->GetFd());
+      listen_channel->EnableReadEvents(); // 关注可读事件
+  
+      while (true)
+      {
+          std::vector<Channel *> active_channels = epoll_fd->Poll();
+          int nfds = active_channels.size();
+          for (int i = 0; i < nfds; ++i)
+          {
+              int channel_fd = active_channels[i]->GetFd();
+              if (channel_fd == server_socket->GetFd())    // 发生事件的fd是服务器的监听fd(listening_sockfd)，表示有新客户端连接
+              {
+                  InetAddress *client_addr = new InetAddress();                               // TODO: 记得内存释放
+                  Socket *client_socket = new Socket(server_socket->Accept(client_addr));     // TODO: 记得内存释放
+                  printf("new client fd[%d]! IP: %s Port: %d\n", client_socket->GetFd(), inet_ntoa(client_addr->address_.sin_addr), ntohs(client_addr->address_.sin_port));
+                  
+                  client_socket->SetNonBlocking();
+                  Channel *client_channel = new Channel(epoll_fd, client_socket->GetFd());
+                  client_channel->EnableReadEvents();
+              }
+              else if (active_channels[i]->GetRevents() & EPOLLIN)        // 就绪事件的是客户端，并且是可读事件
+              {
+                  HandleReadEvent(channel_fd);
+              }
+              else
+              {
+                  printf("something else happened\n");
+              }
+          }
+      } // end of while
+  
+      if (server_socket != nullptr)
+      {
+          delete server_socket;
+          server_socket = nullptr;
+      }
+      if (server_address != nullptr)
+      {
+          delete server_address;
+          server_address = nullptr;
+      }
+      if (epoll_fd != nullptr)
+      {
+          delete epoll_fd;
+          epoll_fd = nullptr;
+      }
+      return 0;
+  }
+  ```
+
+## 事件驱动核心类
+
+将之前的过程式编程向着面向对象编程修改。本质是事件驱动。[如何深刻理解Reactor和Proactor？小林coding的回答](https://www.zhihu.com/question/26943938/answer/1856426252) 这篇对Reactor模式解释地蛮清楚的。这一小篇章用来将之前的内容分离成**服务器模块**和**事件驱动模块**，从而把服务器逐渐改造成Reactor模式。
+
+- 服务器模块：核心是`Server`类，负责与客户端建立连接并进行业务处理；
+- 事件驱动模块：核心是`EventLoop`类和`Channel`类；
+  - `EventLoop`类：负责`sockfd`及事件的监听和事件分发；
+  - `Channel`类：负责事件的注册，以及绑定事件处理的回调函数；
+
+一个`EventLoop`对应一个内核中事件表`epoll_fd`（供全局使用）；
+
+一个`Channel`对应一个关心的`sockfd`，以及该`sockfd`上关心的事件和事件对应的处理方式（该处理方式可以通过设置关心的事件时，设置该事件的处理方式的回调函数）；
+
+一个`Server`负责建立连接（在新建`Channel`时根据不同的`sockfd`绑定不同的回调函数：是`listen_sockfd`则绑定`NewConnection()`用来新建连接，是`client_sockfd`则绑定`HandleReadEvent()`读写数据），以及进行业务处理（read->业务处理->send）（目前版本是这样）；
+
+新建的`EventLoop`类相当于一个`Reactor`（即分发器`Dispatcher`），这个类首先生成内核中的事件表实例`epoll_fd`（通过`Epoll`类实现，并通过`Channel`类对关心的`sockfd`和相应事件的注册/修改、以及绑定事件处理的回调函数），然后循环不停地监听，一旦有事件就绪就**分发**给`Handler`处理（具体的`Handler`即每个`Channel`绑定的回调处理函数；
+
+需要修改的文件：
+
+- 把代码放到`src`目录下, `Makefile`做相应修改；
+
+- 新增`Server`类，位于`src/server.h, src/server.cpp`文件中：
+
+  ```c++
+  // server.h
+  #ifndef SERVER_H_
+  #define SERVER_H_
+  
+  #include <cstring>
+  #include <functional>
+  #include <sys/epoll.h>
+  #include <unistd.h>
+  
+  #include "channel.h"
+  #include "event_loop.h"
+  #include "inet_address.h"
+  #include "socket.h"
+  
+  const int kReadBuffer = 1024;
+  
+  class EventLoop;
+  class Socket;
+  
+  class Server
+  {
+  private:
+      EventLoop *event_loop_;
+  
+  public:
+      Server(EventLoop *event_loop);
+      ~Server();
+  
+      void HandleReadEvent(int sockfd);
+      void NewConnection(Socket *server_socket);
+  };
+  #endif
+  
+  // server.cpp
+  #include "server.h"
+  
+  Server::Server(EventLoop *event_loop) :event_loop_(event_loop)
+  {
+      Socket *server_socket = new Socket();
+      InetAddress *server_addr = new InetAddress("127.0.0.1", 8888);
+      server_socket->Bind(server_addr);
+      server_socket->Listen();
+      server_socket->SetNonBlocking();
+  
+      Channel *server_channel = new Channel(event_loop, server_socket->GetFd());
+      std::function<void()> callback = std::bind(&Server::NewConnection, this, server_socket);
+      server_channel->SetCallback(callback);
+      server_channel->EnableReadEvents();
+  }
+  
+  Server::~Server()
+  {
+  }
+  
+  void Server::HandleReadEvent(int sockfd)
+  {
+      char buf[kReadBuffer] = { 0 };
+      while (true)    // 由于使用非阻塞IO，读取客户端buffer时，需要不断读取，一次读取buf大小数据，直到全部读取完毕
+      {
+          memset(buf, 0, sizeof(buf));
+          ssize_t read_bytes = read(sockfd, buf, sizeof(buf));
+          if (read_bytes > 0)
+          {
+              printf("message from client fd[%d]: %s\n", sockfd, buf);
+              write(sockfd, buf, sizeof(buf));
+          }
+          else if (read_bytes == -1 && errno == EINTR)        // 客户端正常中断，继续读取
+          {
+              printf("continue reading");
+              continue;
+          }
+          else if (read_bytes == -1 && ((errno == EAGAIN) || (errno == EWOULDBLOCK)))         // 非阻塞IO，这个条件表示数据全部读取完毕
+          {
+              printf("finish reading once, errno: %d\n", errno);
+              break;
+          }
+          else if (read_bytes == 0)                           // EOF, 客户端断开连接
+          {
+              printf("EOF, client fd[%d] disconnected\n", sockfd);
+              close(sockfd);       // 关闭socket会自动将文件描述符从epoll树上移除
+              break;
+          }
+          else
+          {
+              // 其他 read_bytes == -1 的情况处理
+          }
+      }
+  }
+  
+  void Server::NewConnection(Socket *server_socket)
+  {
+      InetAddress *client_addr = new InetAddress();                               // TODO: 记得内存释放
+      Socket *client_socket = new Socket(server_socket->Accept(client_addr));     // TODO: 记得内存释放
+      printf("new client fd[%d]! IP: %s Port: %d\n", client_socket->GetFd(), inet_ntoa(client_addr->address_.sin_addr), ntohs(client_addr->address_.sin_port));
+  
+      client_socket->SetNonBlocking();
+      Channel *client_channel = new Channel(event_loop_, client_socket->GetFd());
+      std::function<void()> callback = std::bind(&Server::HandleReadEvent, this, client_socket->GetFd());
+      client_channel->SetCallback(callback);
+      client_channel->EnableReadEvents();
+  }
+  ```
+
+- 新增`EventLoop`类，位于`src/event_loop.h, src/event_loop.cpp`文件国：
+
+  ```c++
+  #ifndef EVENT_LOOP_H_
+  #define EVENT_LOOP_H_
+  
+  #include <sys/epoll.h>
+  #include <vector>
+  
+  #include "channel.h"
+  #include "epoll.h"
+  
+  class Channel;
+  class Epoll;
+  
+  class EventLoop
+  {
+  private:
+      Epoll *epoll_fd_;
+      bool is_quit_;
+  
+  public:
+      EventLoop();
+      ~EventLoop();
+  
+      void Loop();
+      void UpdateChannel(Channel *channel);
+  };
+  
+  #endif
+  
+  // event_loop.cpp
+  #include "event_loop.h"
+  
+  EventLoop::EventLoop()
+  {
+      epoll_fd_ = new Epoll();
+      ErrorIf((epoll_fd_ == nullptr), "epoll new error");
+  }
+  
+  EventLoop::~EventLoop()
+  {
+      if (epoll_fd_ != nullptr)
+      {
+          delete epoll_fd_;
+          epoll_fd_ = nullptr;
+      }
+  }
+  
+  void EventLoop::Loop()
+  {
+      while (!is_quit_)
+      {
+          std::vector<Channel *> channels;
+          channels = epoll_fd_->Poll();
+          for (auto it = channels.begin(); it != channels.end(); ++it)
+          {
+              (*it)->HandleEvents();
+          }
+      }
+  }
+  
+  void EventLoop::UpdateChannel(Channel *channel)
+  {
+      epoll_fd_->UpdateChannel(channel);
+  }
+  ```
+
+- 修改`Channel`类：
+
+  ```c++
+  #ifndef CHANNEL_H_
+  #define CHANNEL_H_
+  
+  #include <sys/epoll.h>
+  #include <functional>
+  
+  #include "epoll.h"
+  #include "event_loop.h"
+  
+  class Epoll;
+  class EventLoop;
+  
+  class Channel
+  {
+  private:
+      //Epoll *epfd_;                                           // 内核中 epoll 事件表的标识
+      EventLoop *event_loop_;
+      int fd_;                                                // 该socket对应的fd
+      uint32_t events_;                                       // 关注的事件
+      uint32_t revents_;                                      // 返回的活跃事件; 当有事件发生时，发生的事件类型会写到revents_中,然后就可以根据这个值来决定执行哪个处理函数
+      bool in_epoll_;                                         // 当前Channel是否已经在epoll的事件表（红黑树）中;(可理解为该Channel一一对应的fd是否已经在epoll的事件表中)
+      std::function<void()> callback_;                        // 回调函数
+  
+  public:
+      //Channel(Epoll *epfd, int fd);
+      Channel(EventLoop *event_loop, int fd);
+      ~Channel();
+  
+      void EnableReadEvents();                                // 关注可读事件
+      void HandleEvents();
+  
+      int GetFd();
+      uint32_t GetEvents();
+      uint32_t GetRevents();
+      void SetRevents(uint32_t revents);
+      bool GetInEpoll();
+      void SetInEpoll();
+      void SetCallback(std::function<void()> callback);
+  };
+  #endif
+  
+  // channel.cpp
+  #include "channel.h"
+  
+  Channel::Channel(EventLoop *event_loop, int fd) :event_loop_(event_loop), fd_(fd), events_(0), revents_(0), in_epoll_(false)
+  {
+  }
+  
+  Channel::~Channel()
+  {
+  }
+  
+  void Channel::EnableReadEvents()
+  {
+      events_ = EPOLLIN | EPOLLET;    // events_ |= (EPOLLIN | EPOLLET); 是否更合理？
+      event_loop_->UpdateChannel(this);
+  }
+  
+  void Channel::HandleEvents()
+  {
+      callback_();
+  }
+  
+  int Channel::GetFd()
+  {
+      return fd_;
+  }
+  
+  uint32_t Channel::GetEvents()
+  {
+      return events_;
+  }
+  
+  uint32_t Channel::GetRevents()
+  {
+      return revents_;
+  }
+  
+  void Channel::SetRevents(uint32_t ev)
+  {
+      revents_ = ev;
+  }
+  
+  bool Channel::GetInEpoll()
+  {
+      return in_epoll_;
+  }
+  
+  void Channel::SetInEpoll()
+  {
+      in_epoll_ = true;
+  }
+  
+  void Channel::SetCallback(std::function<void()> callback)
+  {
+      callback_ = callback;
+  }
+  ```
+
+## 给服务器添加一个Acceptor
+
+目前的服务器包括**接受连接**和**echo客户端发来的数据**，现在对其进一步抽象、模块化。
+
+可以发现，对于每一个事件，不论做什么操作，它都位于一个TCP连接上，其前提都是先`accept()`接收这个TCP连接，再把`sockfd`注册到`epoll`事件表中，等后续该TCP连接有就绪事件了再对其处理。因此，可以把**接收连接**这一模块分离出来，添加一个`Acceptor`类。
+
+修改的文件：
+
+- `Makefile`修改：添加`Acceptor`类；
+
+- 新建`Acceptor`类（包含在`acceptor.h, acceptor.cpp`中）；
+
+  ```c++
+  #ifndef ACCEPTOR_H_
+  #define ACCEPTOR_H_
+  
+  #include <sys/epoll.h>
+  #include <functional>
+  
+  #include "epoll.h"
+  #include "event_loop.h"
+  #include "inet_address.h"
+  #include "socket.h"
+  
+  class Epoll;
+  class EventLoop;
+  class InetAddress;
+  class Socket;
+  
+  class Acceptor
+  {
+  private:
+      EventLoop *event_loop_;
+      Socket *socket_;
+      InetAddress *addr_;
+      Channel *accept_channel_;
+  
+  public:
+      std::function<void(Socket *)> new_connection_callback_;
+  
+  public:
+      Acceptor(EventLoop *event_loop);
+      ~Acceptor();
+  
+      void AcceptConnection();
+      void SetNewConnectionCallback(std::function<void(Socket *)> callback);    
+  };
+  #endif
+  
+  // acceptor.cpp
+  #include "acceptor.h"
+  
+  Acceptor::Acceptor(EventLoop *event_loop) :event_loop_(event_loop)
+  {
+      socket_ = new Socket();
+      addr_ = new InetAddress("127.0.0.1", 8888);
+      socket_->Bind(addr_);
+      socket_->Listen();
+      socket_->SetNonBlocking();
+  
+      accept_channel_ = new Channel(event_loop_, socket_->GetFd());
+      std::function<void()> callback = std::bind(&Acceptor::AcceptConnection, this);
+      accept_channel_->SetCallback(callback);
+      accept_channel_->EnableReadEvents();
+  }
+  
+  Acceptor::~Acceptor()
+  {
+      if (accept_channel_ != nullptr)
+      {
+          delete accept_channel_;
+          accept_channel_ = nullptr;
+      }
+      if (addr_ != nullptr)
+      {
+          delete addr_;
+          addr_ = nullptr;
+      }
+      if (socket_ != nullptr)
+      {
+          delete socket_;
+          socket_ = nullptr;
+      }
+  }
+  
+  void Acceptor::AcceptConnection()
+  {
+      new_connection_callback_(socket_);
+  }
+  
+  void Acceptor::SetNewConnectionCallback(std::function<void(Socket * )> callback)
+  {
+      new_connection_callback_ = callback;
+  }
+  ```
+
+- 修改`Server`类；
+
+  ```c++
+  ```
+
+  
