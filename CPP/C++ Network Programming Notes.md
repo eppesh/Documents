@@ -2,6 +2,42 @@
 
 # Basic Knowledge
 
+## 内核缓冲区的个人理解
+
+TCP协议是针对端对端的数据传送，即发送端和接收端。
+在操作系统中有用户空间(`user space`)和内核空间(`kernel space`)；
+每个TCP连接的每一端，在内核中都有一个**发送缓冲区**或**接收缓冲区**，可理解为 TCP缓冲区。
+
+<img src="https://bigbyto.gitee.io//assets/images/io-model/ioflow.png" alt="pic" style="zoom: 67%;" />
+
+**IO操作例1：网络通信**
+
+- 客户端向服务端发送数据：
+  客户端调用`send()`，只是把应用层(位于user sapce)的数据**拷贝**到`connfd`的内核的**发送缓冲区**中就完事了；之后是TCP把数据真正发送到对端。
+- 服务端接收客户端的数据：
+
+1. 服务端`clienfd`的内核的**接收缓冲区**前提是得有数据（有数据时系统会把数据从硬件--网络适配器放到内核的接收缓冲区中）；
+2. 服务端调用`recv()`，把客户端发送来的数据从`clientfd`的内核的**接收缓冲区拷贝**给应用程序（user sapce中）；
+
+**IO操作例2：文件读写**
+
+- 应用程序A往磁盘**写入**数据：
+  A通过系统调用`write()`把待写入的数据从用户空间**拷贝**到内核的**缓冲区**；之后系统会把数据写入磁盘；
+- 应用程序A从磁盘**读取**数据：
+
+1. 内核的**缓冲区**前提是得有数据（有数据时系统会把数据从硬件--磁盘放到内核的缓冲区中）；
+2. A通过系统调用`read()`，把要读取的数据从内核的**缓冲区拷贝**到用户空间供应用A使用。
+
+结合上面的例子，可知：
+对于处于用户空间的应用程序A来说：
+
+- 只有内核的**接收缓冲区**中有数据时，才可以**读取/接收**(`read(),recv() `)数据；
+- 只有内核的**发送缓冲区**中有数据时，才可以**写入/发送**(`write(),send()`)数据；
+
+缓冲区**有数据**可以**读取/接收**，称为**可读事件**；
+缓冲区**有空间**可以**写入/发送**，称为**可写事件**；
+**事件分发**可理解为对于发生的不同事件，采用不同方式的处理。如发生了可读事件，就进行A处理；发生了可写事件，就进行B处理。
+
 ## User space & Kernel space
 
 ![Five IO models of UNIX](https://imgs.developpaper.com/imgs/4167911056-5ebe4bed1ac4e_articlex.png)
@@ -86,6 +122,39 @@ When a program asks to **open** a file — or another data resource, like a [net
 - [理解Linux中的file descriptor](https://wiyi.org/linux-file-descriptor.html); 
 
 ## What's a Socket?
+
+### socket的个人理解
+
+`socket`称为“套接字”，在Linux中它本质是一个**文件描述符(File Discriptor**,简称**fd**). 
+1. 网络通信可以把网线理解为一根线段`AB`，`A`和`B`分别是线段的两头（Endpoint）。每个`socketfd`对应一头，要么是`A`头，要么是`B`头，每一头/每个端点(Endpoint)都对应着一个IP和一个Port。
+2. 指定三类套接字`socketfd`，方便说明。
+`listenfd`: **服务端**用于**监听**的`socketfd`；
+`clientfd`: **服务端**获取到的**已连接成功的**客户端`socketfd`;(即`accept()`一个客户端后新产生的那个`socketfd`)；
+`connfd`: **客户端**调用`connect()`与服务端建立连接后返回的`socketfd`；
+
+可以想像，有`N`个客户端和`1`个服务端，并且这`N`个客户端都成功连接上服务端的场景：
+- 服务端有`1`个`listenfd`用来监听；
+- 服务端有`N`个`clientfd`一一对应连接上的客户端；
+- 客户端有`N`个`connfd`对应着服务端上的`N`个`clientfd`，此时`connfd`就相当于线段`AB`中的`A`端，`clientfd`相当于线段`AB`中的`B`端，通信就在这两个端头进行着，直到连接断开。
+
+注意：
+
+- `listen()`的第二个参数是告诉内核设置**连接队列**的长度。
+
+  内核为每个`listen`状态的`socket`设置两个队列：未完成连接队列(incomplete connection queue)和已完成连接队列(completed connection queue)，这两个队列共用`listen()`设置的连接队列的长度。
+
+  当客户端发送`SYN`报文的时候（第1次握手），服务器检测未完成连接队列是否已满，如果满了就丢弃该`SYN`，如果没满就把这个连接放入未完成队列，并发送`ACK + SYN`（第2次握手）； 当客户端收到`ACK + SYN`后，会发送`ACK`报文（第3次握手），并从`connect()`返回；服务器收到这个`ACK`后把连接从未完成连接队列中取出放入已完成连接队列中，等待`accept()`把这个连接取走。此时，三次握手全部完成，两端连接都是`ESTABLISH`状态。
+
+- `accept()`只会从`listen()`的已完成的连接队列中取连接出来（拿**现成的**、已连接上的连接，而不是字面意义上的”接收“），因此，三次握手发生在`accept()`之前；即，`accept()`返回时，连接已经是建立好了的。
+
+  > The backlog can be reached if the completed connection queue fills (i.e., the server process or the server host is so busy that the process cannot call `accept` fast enough to take the completed entries off the queue) or if the incomplete connection queue fills. The latter is the problem that HTTP servers face, when the round-trip time between the client and server is long, compared to the arrival rate of new connection requests, because a new SYN occupies an entry on this queue for one round-trip time. […]
+  >
+  > The completed connection queue is almost always empty because when an entry is placed on this queue, the server's call to `accept` returns, and the server takes the completed connection off the queue.
+
+参考：
+
+- [How TCP backlog works in Linux](http://veithen.io/2014/01/01/how-tcp-backlog-works-in-linux.html)；
+- [connect accept listen 与三次握手的关系](https://blog.csdn.net/qq_33113661/article/details/88837538); 
 
 ### Socket Definition
 
@@ -1327,7 +1396,7 @@ POSIX对这两个术语定义如下:
 >
 > Using these definitions, the first four I/O models—blocking, nonblocking, I/O multiplexing, and signal-driven I/O—are all synchronous because the actual I/O operation (recvfrom) blocks the process. Only the asynchronous I/O model matches the asynchronous I/O definition.
 
-参考资料：
+## 参考资料
 
 - [100%弄明白5种I/O模型](https://zhuanlan.zhihu.com/p/115912936); 
 - [一篇文章读懂阻塞，非阻塞，同步，异步](https://www.jianshu.com/p/b8203d46895c); 
@@ -1337,6 +1406,10 @@ POSIX对这两个术语定义如下:
 - [理解Linux中的file descriptor(文件描述符)](https://wiyi.org/linux-file-descriptor.html); 
 - [Five IO models of Unix](https://developpaper.com/five-io-models-of-unix/);
 - [EPOLLET VS EPOLLLT](https://zhuanlan.zhihu.com/p/36977578); 
+- [CSDN-C++网络编程实战项目--Sinetlib网络库（2）——I/O复用与事件分发](https://blog.csdn.net/silence1772/article/details/83307716);
+- [CSDN-478-手写C++muduo库(Channel)](https://blog.csdn.net/LINZEYU666/article/details/119908766);
+- [Github-day05-epoll高级用法-Channel登场](https://github.com/yuesong-feng/30dayMakeCppServer/blob/main/day05-epoll%E9%AB%98%E7%BA%A7%E7%94%A8%E6%B3%95-Channel%E7%99%BB%E5%9C%BA.md);
+- [知乎-Reactor模式介绍](https://zhuanlan.zhihu.com/p/428693405);
 
 # Programming Practice
 
@@ -1823,6 +1896,8 @@ std::vector<epoll_event> Epoll::Poll(int timeout /* = -1 */)
 
 - 新建`Socket`类，位于`socket.h, socket.cpp`中；
 
+  该类中的`sockfd_`既可以是`listenfd`，也可以是`clientfd`; 前者调用默认构造函数创建，并可使用所有方法；后者通过带参构造函数来赋值，只使用`SetNonBlocking()`和`GetFd()`两个方法。
+
 ```c++
 // socket.h
 #ifndef SOCKET_H_
@@ -1844,15 +1919,17 @@ private:
     int sockfd_;
 
 public:
-    Socket();
-    Socket(int sockfd);
+    Socket();                                       // 默认构造函数表示是新建listenfd,并赋值给sockfd_
+    Socket(int sockfd);                             // 带参构造函数表示是客户端的clientfd,并赋值给sockfd_
     ~Socket();
 
+    // listenfd 使用下面5个方法
     void Bind(InetAddress *address);                // 绑定IP和Port
     void Listen();                                  // 监听
-    void SetNonBlocking();                          // 设置为非阻塞
-
     int Accept(InetAddress *address);               // 接受连接,返回客户端fd
+
+    // clientfd 只使用下列2个方法
+    void SetNonBlocking();                          // 设置为非阻塞
     int GetFd();                                    // 获取fd
 };
 
@@ -2642,6 +2719,25 @@ Sean注：这里使用`Channel`类来封装`fd`，类似`ClockIn`项目中的`Gr
 
 目前的服务器包括**接受连接**和**echo客户端发来的数据**，现在对其进一步抽象、模块化。
 
+这一小节新建的`Acceptor`类的作用：
+
+1. 使用`listenfd`监听连接请求；
+2. 接受并建立连接；【注：这一步的逻辑在`Acceptor`类中，但利用回调函数，其最终的实现代码还位于`Server`类中；】
+
+**疑问**：为何新建连接从逻辑上已经分离到`Acceptor`类中了，但实际工作还是由`Server`类来完成呢？
+
+答：因为新建连接的实际操作不适合放到`Acceptor`类中，会增加其复杂性、不利于模块化，因此把实际操作的工作放到`Server`类中完成。
+
+> 新建连接的实际操作是通过`accept(listenfd,...)`返回一个新的`fd`，即`clientfd`，后续会在该`clientfd`上接收/发送数据。
+>
+> `Acceptor`类的目的就是把**建立连接**这部分模块化，即它只负责**建立连接**即可，而不用负责对该连接的后续处理。此外，建立连接时的`listenfd`跟建立连接后生成的`clientfd`没有任何关系，因此我们不需要在`Acceptor`类中处理`clientfd`。
+>
+> 假设我们把新建连接的实际操作也放到`Acceptor`类中，那么新产生的`clientfd`就也需要由`Acceptro`类负责其生命周期；比如，新建连接时`new`出一个`client_socket`对象，那么`Accepter`类需要等`clientfd`数据处理结束后负责`delete`掉这个`client_socket`对象。这显然跟我们的初衷（只负责建立连接）相矛盾。因此，还是应该由`Server`类来实际创建`clientfd`并管理其生命周期更合适。
+>
+> 另一角度理解：
+>
+> `Acceptor`类中有一个`Socket`对象，即`listenfd`；后续会把新建连接抽象成一个TCP连接类（即`Connection`类），`Connection`类中也有一个`Socket`对象，即`clientfd`；由于这两个对象没有任何关系，`Acceptor`类和`Connectin`类就像两条平行线，互不相干。如果把`Connection`类放到`Acceptor`类中，显然是不合适的。就像两个级别一样大的人A和B，却要把B交给A管理，是不合理的，应该都交给他们的上级来管理（即由`Server`类这个上级来管理`Acceptor`类和`Connection`类）。
+
 可以发现，对于每一个事件，不论做什么操作，它都位于一个TCP连接上，其前提都是先`accept()`接收这个TCP连接，再把`sockfd`注册到`epoll`事件表中，等后续该TCP连接有就绪事件了再对其处理。因此，可以把**接收连接**这一模块分离出来，添加一个`Acceptor`类。
 
 修改的文件：
@@ -2737,6 +2833,535 @@ Sean注：这里使用`Channel`类来封装`fd`，类似`ClockIn`项目中的`Gr
 - 修改`Server`类；
 
   ```c++
+  // server.h中添加了一个private的成员变量,其他不变
+      Acceptor *acceptor_;
+  // server.cpp 构造函数和析构函数有改动，其他未变
+  Server::Server(EventLoop *event_loop) :event_loop_(event_loop), acceptor_(nullptr)
+  {
+      acceptor_ = new Acceptor(event_loop_);
+      std::function<void(Socket *)> callback = std::bind(&Server::NewConnection, this, std::placeholders::_1);
+      acceptor_->SetNewConnectionCallback(callback);
+  }
+  
+  Server::~Server()
+  {
+      if (acceptor_ != nullptr)
+      {
+          delete acceptor_;
+          acceptor_ = nullptr;
+      }
+  }
+  ```
+  
+
+### 小结
+
+梳理一下当前的大致流程：（从服务器端的`main()`入口开始）
+
+```c++
+// 服务器端 server.cpp (不是本网络库的server类，而是调用正在编写的该网络库的服务来建立这个服务端应用)
+int main()
+{
+    EventLoop *event_loop = new EventLoop();
+    Server *server = new Server(event_loop);
+    event_loop->Loop();
+    return 0;
+}
+```
+
+1. `new EventLoop()`:
+
+   - `new`一个`Epoll`类的实例`epoll_fd_`，该实例就是内核中`epoll`事务表（红黑树）的唯一标识（由`epoll_create1()`创建）；
+
+     即：这一步在内核中创建了用于IO多路复用的事务表；
+
+2. `new Server()`:
+
+   2.1 `new`一个`Acceptor`：
+
+   - `new`一个`Socket, InetAddress, Channel`，为`Channel::callback_`设置回调函数为`Acceptor::AcceptConnection()`；
+
+     由于在`Channel::HandleEvents()`中才会调用`Channel::callback_`，故调用`Channel::HandleEvents()`时就会调用`Acceptor::AcceptConnection()`; 
+
+     ```c++
+     // 有新客户端连接上来时
+     // Loop()中监听到listen_sockfd上可读事件就绪, 结合下面的2.2；
+     Loop() -> Channel::HandleEvent() 
+         -> Acceptor::AcceptConnection() // 上面2.1里对Channel::callback_设置了回调AcceptConnection()
+         -> Server::NewConnection();	// 下面2.2里对Acceptor::new_connection_callback_设置了NewConnection()
+     ```
+
+   - 向事务表中注册可读事件；
+
+   2.2 为`Acceptor::new_connection_callback_`设置回调函数为`Server::NewConnection()`; 
+
+   由于在`Acceptor::AcceptConnection()`中才会调用`Acceptor::new_connection_callback_`，故调用`Acceptor::AcceptConnection()`时就会调用`Server::NewConnection()`；
+
+3. 开始`EventLoop`中的`Loop()`循环：
+
+   一旦事务表中有就绪事件发生，就调用`Chanel::HandleEvents()`；由于`Chanel::HandleEvents()`中是一个回调函数`Channel::callback_`，因此具体执行要看`Channel::callback_`上绑定哪个回调函数。
+
+4. 在`Server::NewConnection()`被调用后：
+
+   - `new`一个`Socket, InetAddress, Channel`来描述新连接上来的客户端，并为`Channel::callback_`设置回调函数为`Server::HandleReadEvent()`，一旦该客户端上有就绪事件，通过下列流程进行调用：
+
+     ```c++
+     Loop() -> Channel::HandleEvent() 
+         -> Server::HandleReadEvent();	
+     ```
+
+由于该服务的核心是`EventLoop::Loop()`，在这个循环时对就绪事件调用`Channel::HandleEvent()`，其中具体调用的又是`Channel::callback_`上的回调函数，因此，最主要的工作就是在相应逻辑上为`Channel::callback_`设置相应回调函数。
+
+# 建立TCP连接的类
+
+回顾基本的几个关键知识点的伪代码：（可回看上面的[socket的个人理解](#socket的个人理解)]
+
+```c++
+// 在服务器端
+// step 1: 监听
+int listenfd = socket(...);		// 用于监听是否有新连接的fd
+bind(listenfd, addr);			// 把该fd跟服务器地址(IP+Port)进行绑定
+listen(listenfd, ...);			// 开始监听
+
+// step 2: 建立连接
+int clientfd = accept(listenfd, ...);	// 建立连接后返回新连接的fd, listenfd继续去监听
+```
+
+目前的`Server`类主要包含有以下几个操作：
+
+- Op1: 在端口上**监听**是否有连接请求（即`listen_sockfd.listen()`)；
+
+  > 这一部分已经在上一节抽象成`Acceptor`类从`Server`类中分离了出去；虽然新建连接的**逻辑**在`Acceptor::AcceptConnection()`中，但新建连接的**实际工作**还是在`Server`类中完成，详见Op3。
+
+- Op2: 对监听到连接请求的客户端**建立连接**（即`int client_sockfd = accept(...)`）；
+
+  > 这一小节就是对“建立连接”这部分再抽象出来一个`Connection`类。
+
+- Op3: 响应操作1(Op1)中最终执行的操作；
+
+  > Op1中监听到连接请求后，最终会调用`Server::NewConnection()`来`accept()`新连接。
+
+- Op4: 响应操作2中最终执行的操作；
+
+  > Op2中建立好每个跟客户端的连接后，最终会调用`Server::HandleReadEvent()`来收发数据、业务处理。
+
+对于`Acceptor`类中新建立的每个TCP连接，我们抽象成一个`Connection`类，它与`Acceptor`类相似，不同之处在于，`Acceptor`类的处理事件（即新建连接）的实际操作位于`Server`类中，而`Connection`类的处理事件的操作不必那样，由自身来完成即可。
+
+对于一个高并发服务器，一般是有一个`Acceptor`用于接受连接（也可以有多个），有成千上万个TCP连接（即成千上万上`Connection`类的实例）。需要把这些TCP连接都保存下来，可以使用`std::map<int, Connection*>`，`key`是`clientfd`，`value`是其对应`Connection`类实例。
+
+修改的地方：
+
+- 修改`Makefile`，添加`Connection`；
+
+- 修改`Server`类：
+
+  ```c++
+  class Server
+  {
+  private:
+      EventLoop *event_loop_;
+      Acceptor *acceptor_;
+      std::map<int, Connection *> connections_;
+  
+  public:
+      Server(EventLoop *event_loop);
+      ~Server();
+  
+      void NewConnection(Socket *listen_socket);          // 新建连接
+      void DeleteConnection(Socket *client_socket);       // 删除连接
+  };
+  // src/server.cpp
+  Server::Server(EventLoop *event_loop) :event_loop_(event_loop), acceptor_(nullptr)
+  {
+      acceptor_ = new Acceptor(event_loop_);
+      std::function<void(Socket *)> callback = std::bind(&Server::NewConnection, this, std::placeholders::_1);
+      acceptor_->SetNewConnCallback(callback);
+  }
+  
+  Server::~Server()
+  {
+      if (acceptor_ != nullptr)
+      {
+          delete acceptor_;
+          acceptor_ = nullptr;
+      }
+  }
+  
+  void Server::NewConnection(Socket *client_socket)
+  {
+      Connection *conn = new Connection(event_loop_, client_socket);
+      std::function<void(Socket *)> callback = std::bind(&Server::DeleteConnection, this, std::placeholders::_1);
+      conn->SetDelConnCallback(callback);
+  
+      connections_[client_socket->GetFd()] = conn;
+  }
+  
+  void Server::DeleteConnection(Socket *client_socket)
+  {
+      Connection *conn = connections_[client_socket->GetFd()];
+      connections_.erase(client_socket->GetFd());
+      if (conn != nullptr)
+      {
+          delete conn;
+          conn = nullptr;
+      }
+  }
   ```
 
   
+
+- 新增`Connection`类：
+
+  ```c++
+  // 名称：connection.h
+  // 版权：仅供学习
+  // 作者：Sean (eppesh@163.com)
+  // 环境：VS2019
+  // 时间：05/05/2022
+  // 说明：Connection类,一个TCP连接类
+  
+  #ifndef CONNECTION_H_
+  #define CONNECTION_H_
+  
+  #include <sys/epoll.h>
+  #include <functional>
+  
+  #include "channel.h"
+  #include "event_loop.h"
+  #include "socket.h"
+  
+  const int kReadBuffer = 1024;
+  
+  class Channel;
+  class EventLoop;
+  class Socket;
+  
+  class Connection
+  {
+  private:
+      EventLoop *event_loop_;
+      Socket *client_socket_;
+      Channel *client_channel_;
+      std::function<void(Socket *)> del_conn_callback_;               // 删除连接的回调函数
+  
+  public:
+      Connection(EventLoop *event_loop, Socket *socket);
+      ~Connection();
+  
+      void Echo(int sockfd);                                         // 业务处理函数
+      void SetDelConnCallback(std::function<void(Socket *)> callback);    
+  };
+  #endif
+  // connection.cpp
+  #include "connection.h"
+  
+  Connection::Connection(EventLoop *event_loop, Socket *socket) :
+      event_loop_(event_loop), client_socket_(socket), client_channel_(nullptr)
+  {
+      client_channel_ = new Channel(event_loop_, client_socket_->GetFd());
+      std::function<void()> callback = std::bind(&Connection::Echo, this, client_socket_->GetFd());
+      client_channel_->SetCallback(callback);
+      client_channel_->EnableReadEvents();
+  }
+  
+  Connection::~Connection()
+  {
+      if (client_channel_ != nullptr)
+      {
+          delete client_channel_;
+          client_channel_ = nullptr;
+      }
+      if (client_socket_ != nullptr)
+      {
+          delete client_socket_;
+          client_socket_ = nullptr;
+      }
+  }
+  
+  void Connection::Echo(int sockfd)
+  {
+      char buf[kReadBuffer] = { 0 };
+      while (true)    // 由于使用非阻塞IO，读取客户端buffer时，需要不断读取，一次读取buf大小数据，直到全部读取完毕
+      {
+          memset(buf, 0, sizeof(buf));
+          ssize_t read_bytes = read(sockfd, buf, sizeof(buf));
+          if (read_bytes > 0)
+          {
+              printf("message from client fd[%d]: %s\n", sockfd, buf);
+              write(sockfd, buf, sizeof(buf));
+          }
+          else if (read_bytes == -1 && errno == EINTR)        // 客户端正常中断，继续读取
+          {
+              printf("continue reading");
+              continue;
+          }
+          else if (read_bytes == -1 && ((errno == EAGAIN) || (errno == EWOULDBLOCK)))         // 非阻塞IO，这个条件表示数据全部读取完毕
+          {
+              printf("finish reading once, errno: %d\n", errno);
+              break;
+          }
+          else if (read_bytes == 0)                           // EOF, 客户端断开连接
+          {
+              printf("EOF, client fd[%d] disconnected\n", sockfd);
+              //close(sockfd);       // 关闭socket会自动将文件描述符从epoll树上移除
+              del_conn_callback_(client_socket_);     // 调用Server::NewConnection()中设置的回调函数,即Server::DeleteConnection();
+              break;
+          }
+          else
+          {
+              // 其他 read_bytes == -1 的情况处理
+          }
+      }
+  }
+  
+  void Connection::SetDelConnCallback(std::function<void(Socket *)> callback)
+  {
+      del_conn_callback_ = callback;
+  }
+  ```
+
+- 修改`Acceptor`类：
+
+  ```c++
+  class Acceptor
+  {
+  private:
+      EventLoop *event_loop_;
+      Socket *listen_socket_;
+      Channel *accept_channel_;
+      std::function<void(Socket *)> new_conn_callback_;
+  
+  public:
+      Acceptor(EventLoop *event_loop);
+      ~Acceptor();
+  
+      void AcceptConnection();
+      void SetNewConnCallback(std::function<void(Socket *)> callback);    
+  };
+  // acceptor.cpp
+  Acceptor::Acceptor(EventLoop *event_loop) :event_loop_(event_loop)
+  {
+      listen_socket_ = new Socket();
+      InetAddress *addr = new InetAddress("127.0.0.1", 8888);
+      listen_socket_->Bind(addr);
+      listen_socket_->Listen();
+      listen_socket_->SetNonBlocking();
+  
+      accept_channel_ = new Channel(event_loop_, listen_socket_->GetFd());
+      std::function<void()> callback = std::bind(&Acceptor::AcceptConnection, this);
+      accept_channel_->SetCallback(callback);
+      accept_channel_->EnableReadEvents();
+  }
+  
+  Acceptor::~Acceptor()
+  {
+      if (accept_channel_ != nullptr)
+      {
+          delete accept_channel_;
+          accept_channel_ = nullptr;
+      }
+      if (listen_socket_ != nullptr)
+      {
+          delete listen_socket_;
+          listen_socket_ = nullptr;
+      }
+  }
+  
+  void Acceptor::AcceptConnection()
+  {    
+      InetAddress *client_addr = new InetAddress();
+      Socket *client_socket = new Socket(listen_socket_->Accept(client_addr));
+      printf("new client fd[%d]! IP: %s Port: %d\n", client_socket->GetFd(), inet_ntoa(client_addr->address_.sin_addr), ntohs(client_addr->address_.sin_port));
+      client_socket->SetNonBlocking();
+  
+      new_conn_callback_(client_socket);
+  
+      delete client_addr;
+      client_addr = nullptr;
+  }
+  
+  void Acceptor::SetNewConnCallback(std::function<void(Socket * )> callback)
+  {
+      new_conn_callback_ = callback;
+  }
+  ```
+
+# 使用缓冲区
+
+目前该网络库的组成如下：
+
+- `Server`类：服务器类，核心类；负责管理`Acceptor`类和`Connection`类；
+- `EventLoop`类：事件驱动类，核心类；负责维护`epoll`事务表、事件就绪后分发事件；
+- `Acceptor`类：连接类；负责建立新的连接；
+- `Connection`类：TCP连接类；负责每一个新建立的连接，以及该连接上的业务处理；
+- `Socket`类：基础类；包含常用的`socket`操作（`bind, listen, accept`）；
+- `Epoll`类：基础类；负责`epoll`相关操作；
+- `InetAddress`类：网络地址类，基础类；对网络地址相关操作的封装；
+- `Channel`类：基础类；负责把一个`fd`对应的”关心的事件“、”已就绪的事件“、”事件对应的回调函数“等封装整合起来；
+- `Util`类：工具类，基础类；包含常用的辅助方法；
+
+本小节为每个`Connection`类分配一个读缓冲区和写缓冲区，从客户端读取来的数据都存放在读缓冲区里。
+
+修改内容如下：
+
+- 修改`Makefile`：添加`src/buffer`; 
+
+- 修改`Connection`类：
+
+  ```c++
+  class Connection
+  {
+  private:
+      EventLoop *event_loop_;
+      Socket *client_socket_;
+      Channel *client_channel_;
+      std::function<void(Socket *)> del_conn_callback_;               // 删除连接的回调函数
+      std::string *in_buffer_;
+      Buffer *read_buffer_;
+  
+  public:
+      Connection(EventLoop *event_loop, Socket *socket);
+      ~Connection();
+  
+      void Echo(int sockfd);                                         // 业务处理函数
+      void SetDelConnCallback(std::function<void(Socket *)> callback);    
+  };
+  // connection.cpp
+  Connection::Connection(EventLoop *event_loop, Socket *socket) :
+      event_loop_(event_loop), client_socket_(socket), client_channel_(nullptr),
+      in_buffer_(new std::string()), read_buffer_(nullptr)
+  {
+      client_channel_ = new Channel(event_loop_, client_socket_->GetFd());
+      std::function<void()> callback = std::bind(&Connection::Echo, this, client_socket_->GetFd());
+      client_channel_->SetCallback(callback);
+      client_channel_->EnableReadEvents();
+      read_buffer_ = new Buffer();
+  }
+  
+  void Connection::Echo(int sockfd)
+  {
+      char buf[kReadBuffer] = { 0 };
+      while (true)    // 由于使用非阻塞IO，读取客户端buffer时，需要不断读取，一次读取buf大小数据，直到全部读取完毕
+      {
+          memset(buf, 0, sizeof(buf));
+          ssize_t read_bytes = read(sockfd, buf, sizeof(buf));
+          if (read_bytes > 0)
+          {
+              read_buffer_->Append(buf, read_bytes);
+          }
+          else if (read_bytes == -1 && errno == EINTR)        // 客户端正常中断，继续读取
+          {
+              printf("continue reading");
+              continue;
+          }
+          else if (read_bytes == -1 && ((errno == EAGAIN) || (errno == EWOULDBLOCK)))         // 非阻塞IO，这个条件表示数据全部读取完毕
+          {
+              printf("finish reading once\n");
+              printf("message from client fd[%d]: %s\n", sockfd, read_buffer_->C_str());
+              ErrorIf((write(sockfd, read_buffer_->C_str(), read_buffer_->Size()) == -1), "socket write error");
+              read_buffer_->Clear();
+              break;
+          }
+          else if (read_bytes == 0)                           // EOF, 客户端断开连接
+          {
+              printf("EOF, client fd[%d] disconnected\n", sockfd);
+              //close(sockfd);       // 关闭socket会自动将文件描述符从epoll树上移除
+              del_conn_callback_(client_socket_);     // 调用Server::NewConnection()中设置的回调函数,即Server::DeleteConnection();
+              break;
+          }
+          else
+          {
+              // 其他 read_bytes == -1 的情况处理
+          }
+      }
+  }
+  ```
+
+- 添加`Buffer`类：
+
+  ```c++
+  #include <iostream>
+  #include <string>
+  
+  class Buffer
+  {
+  private:
+      std::string buffer_;
+  
+  public:
+      Buffer();
+      ~Buffer();
+  
+      void Append(const char *str, int size);
+      ssize_t Size();
+      const char *C_str();
+      void Clear();
+      void Getline();
+  };
+  // buffer.cpp
+  Buffer::Buffer()
+  {
+  
+  }
+  
+  Buffer::~Buffer()
+  {
+  
+  }
+  
+  void Buffer::Append(const char *str, int size)
+  {
+      for (int i = 0; i < size; ++i)
+      {
+          if (str[i] == '\0')
+          {
+              break;
+          }
+          buffer_.push_back(str[i]);
+      }
+  }
+  
+  ssize_t Buffer::Size()
+  {
+      return buffer_.size();
+  }
+  
+  const char *Buffer::C_str()
+  {
+      return buffer_.c_str();
+  }
+  
+  void Buffer::Clear()
+  {
+      buffer_.clear();
+  }
+  
+  void Buffer::Getline()
+  {
+      buffer_.clear();
+      std::getline(std::cin, buffer_);
+  }
+  ```
+
+# 添加线程池
+
+目前是个单线程服务器，所有`fd`上的事件都是在主线程上处理。假设有1000个事件同时到来，每个事件处理需要1秒，那也需要1000秒来传输数据，显然是不合适的。
+
+在`Reactor`模式中，一个`Reactor`应该只负责事件分发而不负责事件处理，因此可以构建一个线程池用于事件处理。
+
+线程池的实现可以有不同思路：
+
+- 思路1：每有一个新任务（就绪的事件），就开一个新线程去处理。
+
+  但这种情况线程数并不固定。假如某一时刻有1000个并发请求，那就需要开1000个线程，但机器未必能支持这么高的并发；而且太多的线程数，线程切换也会耗费大量资源。
+
+- 思路2：采用固定的线程数，可以避免服务器的负载不稳定。具体的工作线程数目，一般是CPU核数（物理支持的最大并发数）。当事件就绪后，将它添加到事件队列中，由工作线程不断主动取出事件队列中的事件进行处理。
+
+  当`Channel`类有事件需要处理时，将这个事件处理添加到线程池，主线程`EventLoop`就可以继续进行事件循环，而不用关心某个`sockfd`上的事件处理。
+
+关于线程池，需注意两点：
+
+1. 多线程环境下对事件队列的读写操作要考虑互斥锁；可使用`std::mutex`; 
+2. 当事件队列为空时，CPU应该不再轮询以节省资源；可使用条件变量`std::condition_variable`.
+
+改动的地方较多，不再在这里列举，以实际代码为准。 
