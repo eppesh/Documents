@@ -1419,6 +1419,35 @@ POSIX对这两个术语定义如下:
 
 - [Github - 30天自制C++服务器](https://github.com/yuesong-feng/30dayMakeCppServer); 
 
+该网络库的组成如下：
+
+- `Server`类：服务器类，核心类；负责管理`Acceptor`类,`Connection`类, 主从Reactor以及线程池；
+
+  主从Reactor模式下，有一个`main Reactor`（只负责**接受**新连接，然后将新连接分配给一个`sub Reactor`）和多个`sub Reactor`；
+
+  - `Server`构造时，会先把新连接绑定到`Server::NewConnection`，这样有连接时就会调用；接着建立一个有`n`个线程的线程池（线程池构造时就会新建`n`个线程，并且这`n`个线程就已经开始在后台运行，一旦任务队列不为空就会从队列中取任务处理），然后再建立`n`个`sub Reactor`，然后将这`n`个`sub Reactor`的`Loop()`函数作为参数添加到线程池的任务队列中，这样每个线程都有一个`EventLoop::Loop()`在运行。
+  - 有连接建立后，在`Server::NewConnection`中会为新建一个`Connection`连接，并为该连接分配一个`sub Reactor`；`Connection`构造时就在这个`sub Reactor`上为该客户端`clientfd`绑定了业务处理的回调函数（如`Echo()`）；然后为该TCP连接设置关闭连接时的回调函数；这样在`Loop()`中一旦该客户端`clientfd`上有就绪事件，就会调用其回调函数（如`Echo()`），并在关闭连接时调用相应的回调函数来删除连接。
+
+  
+
+- `EventLoop`类：事件驱动类，核心类；它就是一个`Reactor`，可理解为一个调度员（dispatcher）；负责维护`epoll`事务表、事件就绪后分发事件；
+
+- `Acceptor`类：连接类；负责建立新的连接；
+
+- `Connection`类：TCP连接类（一个Connection对应一个TCP连接）；负责每一个新建立的连接，以及该连接上的业务处理；一个Connection对应一个`fd`和一个`sub Reactor`；
+
+- `ThreadPool`类：线程池；池中线程个数由硬件所支持的最大线程个数来确定，线程池中包含任务队列（队列中元素即就绪事件绑定的回调处理函数）；
+
+- `Socket`类：基础类；包含常用的`socket`操作（`bind, listen, accept`）；
+
+- `Epoll`类：基础类；负责`epoll`相关操作；
+
+- `InetAddress`类：网络地址类，基础类；对网络地址相关操作的封装；
+
+- `Channel`类：基础类；负责把一个`fd`对应的”关心的事件“、”已就绪的事件“、”事件对应的回调函数“等封装整合起来；可理解为对`fd`的封装；
+
+- `Util`类：工具类，基础类；包含常用的辅助方法；
+
 ## 异常处理
 
 封装一个错误处理函数：
@@ -2912,7 +2941,7 @@ int main()
 
 由于该服务的核心是`EventLoop::Loop()`，在这个循环时对就绪事件调用`Channel::HandleEvent()`，其中具体调用的又是`Channel::callback_`上的回调函数，因此，最主要的工作就是在相应逻辑上为`Channel::callback_`设置相应回调函数。
 
-# 建立TCP连接的类
+## 建立TCP连接的类
 
 回顾基本的几个关键知识点的伪代码：（可回看上面的[socket的个人理解](#socket的个人理解)]
 
@@ -3186,7 +3215,7 @@ int clientfd = accept(listenfd, ...);	// 建立连接后返回新连接的fd, li
   }
   ```
 
-# 使用缓冲区
+## 使用缓冲区
 
 目前该网络库的组成如下：
 
@@ -3343,7 +3372,7 @@ int clientfd = accept(listenfd, ...);	// 建立连接后返回新连接的fd, li
   }
   ```
 
-# 添加线程池
+## 添加线程池
 
 目前是个单线程服务器，所有`fd`上的事件都是在主线程上处理。假设有1000个事件同时到来，每个事件处理需要1秒，那也需要1000秒来传输数据，显然是不合适的。
 
@@ -3368,12 +3397,112 @@ int clientfd = accept(listenfd, ...);	// 建立连接后返回新连接的fd, li
 
 注：使用了多线程，在Linux下编译时，`Makefile`文件的要添加`-pthread`编译选项，否则编译会报错。
 
-# 完善线程池
+## 完善线程池
 
 当前线程池的缺点：
 
 - 任务队列的添加、取出都存在拷贝操作，会影响性能；正确做法是**使用右值移动、完美转发等方式阻止拷贝**；
 - 线程池只接受`std::function<void()>`类型的参数，因此使用进函数参数需要先使用`std::bind()`; 且无法得到返回值；
 
-关于线程池的一些注释，也可以参考 [C++11异步线程池的实现](https://blog.csdn.net/qq_36540451/article/details/121687660); 
+关于线程池的一些注释，也可以参考 [C++11异步线程池的实现](https://blog.csdn.net/qq_36540451/article/details/121687660); 关于线程池的实现，可以参考 [基于C++11的线程池](https://www.cnblogs.com/lzpong/p/6397997.html), [C++线程池](https://wangpengcheng.github.io/2019/05/17/cplusplus_theadpool/); 
+
+## 主从Reactor多线程模式
+
+该模式的特点：
+
+1. 服务器一般只有一个`main Reactor`，有很多`sub Reactor`; 
+2. 服务器管理一个线程池，每一个`sub Reactor`由一个线程来负责`Connection`上的事件循环，事件执行也在这个线程中完成；
+3. `main Reactor`只负责`Acceptor`建立新连接，然后将这个连接分配给一个`sub Reactor`.
+
+这样简易服务器的所有核心模块已经开发完成，采用主从Reactor多线程模式。其中，服务器以事件驱动为核心，服务器线程只负责`main Reactor`的新建连接任务，同时维护一个线程池；每个线程也是一个事件循环（即一个`sub Reactor`），新连接建立后分发给一个`sub Reactor`开始事件监听，有事件发生则在当前线程中处理。这种模式几乎是目前最先进、最好用的服务器设计模式。
+
+## 工程化&代码分析&性能优化
+
+对于复杂的项目，可能会将模块拆分到不同文件夹内、将头文件统一放到一起等，此时再手写`Makefile`文件来编译链接就会很繁琐。这时就应该使用`CMake`来管理项目，让它自动生成`Makefile`文件，从而把更多精力放到写代码上。
+
+先建立编译目录并进入：`mkdir build && cd build`；
+
+进行编译：
+
+```sh
+sean@sean-virtual-machine:~/workspace/cpp/deletable/SHNet/build$ cmake ..
+-- The C compiler identification is GNU 9.4.0
+-- The CXX compiler identification is GNU 9.4.0
+-- Check for working C compiler: /usr/bin/cc
+-- Check for working C compiler: /usr/bin/cc -- works
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Check for working CXX compiler: /usr/bin/c++
+-- Check for working CXX compiler: /usr/bin/c++ -- works
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Pine/main found clang-format at /usr/bin/clang-format
+-- Pine/main found clang-tidy at /usr/bin/clang-tidy
+-- Pine/main found cpplint at /home/sean/.local/bin/cpplint
+-- CMAKE_CXX_FLAGS:  -fPIC -Wall -Wextra -std=c++17 -pthread -Wno-unused-parameter -Wno-attributes
+-- CMAKE_CXX_FLAGS_DEBUG: -g -O0 -ggdb -fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls
+-- CMAKE_EXE_LINKER_FLAGS:  -fPIC
+-- CMAKE_SHARED_LINKER_FLAGS:  -fPIC
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /home/sean/workspace/cpp/deletable/SHNet/build
+```
+
+然后使用CMake生成Makefile：
+
+```
+cmake ..
+```
+
+生成Makefile后，使用以下命令进行代码格式化:
+
+```
+make format
+```
+
+然后用cpplint检查代码:
+
+```
+make cpplint
+```
+
+最后使用clang-tidy进行代码分析：
+
+```
+make clang-tidy
+```
+
+将所有的警告都修改好，重新运行这三个命令直到全部通过。然后使用`make`指令即可编译整个网络库，会被保存到`lib`文件夹中，但这里没有可执行文件。如果我们需要编译可执行服务器，需要编译`test`目录下相应的源文件:
+
+```
+make server
+make multiple_client
+make single_client
+```
+
+生成的可执行文件在`build/test`目录下，这时使用`./test/server`即可运行服务器。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
