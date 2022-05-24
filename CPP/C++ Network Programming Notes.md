@@ -3486,7 +3486,11 @@ SHNet/build$ make single_client
 
 生成的可执行文件在`build/bin`目录下，这时使用`./bin/server`即可运行服务器。
 
+## 支持业务逻辑自定义、完善Connection类
 
+完善`Connection`类，支持业务逻辑自定义。
+
+# 心里很难受 不想更新了
 
 
 
