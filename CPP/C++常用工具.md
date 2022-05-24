@@ -168,7 +168,7 @@ clang-tidy-13/未知 1:13~++20210327080829+e5f2898bc751-1~exp1~20210327192522.36
 
 参考：
 
-- 官方文档：[Clang 11 documentation](https://clang.llvm.org/docs/ClangFormatStyleOptions.html)；
+- 官方文档：[Clang-Format Style Options](https://clang.llvm.org/docs/ClangFormatStyleOptions.html)；【这个最全，且有示例；英文】
 - [Clang-Format 使用指南](https://www.swack.cn/wiki/001558681974020669b912b0c994e7090649ac4846e80b2000/00158131059939952d487f8b3a6425fb6d945fa40a9aa7f000); 
 - [团队效率工具：代码格式化之clang-format](https://blog.csdn.net/z2066411585/article/details/82290477); 
 
@@ -176,7 +176,701 @@ clang-tidy-13/未知 1:13~++20210327080829+e5f2898bc751-1~exp1~20210327192522.36
 
 ## clang-format 选项
 
-`.clang-format`文件具体参数设置：（参考：[Clang-Format Style Options](https://clang.llvm.org/docs/ClangFormatStyleOptions.html); ）
+`.clang-format`文件具体参数设置：（参考：[Clang-Format Style Options](https://clang.llvm.org/docs/ClangFormatStyleOptions.html); 以及 [clang-format 配置文件翻译](https://blog.csdn.net/a405197809/article/details/117634686) ）
+
+```sh
+---
+# 语言 ： None, Cpp, Java, JavaScript, ObjC, Proto, TableGen, TextProto
+Language:        Cpp
+# BasedOnStyle:  LLVM
+ 
+# 访问权限说明符的偏移（public\private等; -4表示顶头没有缩进；感觉“IndentAccessModifiers :false”没有起作用，如果起作用了，那么AccessModifierOffset就无效了）
+AccessModifierOffset: -4
+ 
+# 开括号后的对齐（开圆括号、尖括号、方括号），
+# 对齐方式有：Align, DontAlign, AlwaysBreak(总是在开括号后换行)
+AlignAfterOpenBracket: Align
+ 
+ 
+##################################################
+# 对齐方式之 AlignConsecutiveStyle
+# 连续相同操作时的对齐方式
+# -- None - 不对齐
+# -- Consecutive - 对齐所有连续操作（遇到空行或注释则不再对齐）
+# -- AcrossEmptyLines - 在 Consecutive 的基础上，遇到空行时继续对齐，遇到注释时不再对齐
+# -- AcrossComments - 在 Consecutive 的基础上，遇到注释时继续对齐，遇到空行时不再对齐
+# -- AcrossEmptyLinesAndComments - 在 Consecutive 的基础上，遇到空行或注释时，继续对齐
+##################################################
+ 
+# 连续宏定义时的对齐方式 （@ref AlignConsecutiveStyle）
+AlignConsecutiveMacros: Consecutive
+ 
+# 连续赋值时的对齐方式（@ref AlignConsecutiveStyle）
+AlignConsecutiveAssignments: AcrossEmptyLinesAndComments
+ 
+# 连续位域的对齐方式（@ref AlignConsecutiveStyle）
+AlignConsecutiveBitFields: Consecutive
+ 
+# 连续声明时，变量名的对齐方式（@ref AlignConsecutiveStyle）
+AlignConsecutiveDeclarations: Consecutive
+ 
+ 
+# 反斜杆换行的对齐方式
+# -- DontAlign - 不进行对齐
+# -- Left - 反斜杠靠左对齐
+# -- Right - 反斜杠靠右对齐
+AlignEscapedNewlines: Left
+ 
+ 
+# 二元、三元表达式的对齐方式（当表达式需要占用多行时）
+# -- DontAlign - 不进行对齐
+# -- Align - 从操作符开始对齐
+# -- AlignAfterOperator - 从操作数开始对齐
+AlignOperands:   Align
+ 
+ 
+# 是否对齐行尾注释？
+# -- true - 启用对齐
+# -- false - 无需对齐
+AlignTrailingComments: true
+ 
+ 
+# 当函数调用和参数无法放在同一行时，是否将参数全部放在下一行
+# -- true - 全部放在下一行
+# -- false - 不全部放在下一行
+AllowAllArgumentsOnNextLine: true
+ 
+ 
+# 当构造函数的成员变量初始化无法放在同一行时，是否将成员变量的初始化放在下一行？
+# -- true - 全部放在下一行
+# -- false - 不全部放在下一行
+# NOTE : 本配置仅在 ConstructorInitializerAllOnOneLineOrOnePerLine 为 true 时有效
+AllowAllConstructorInitializersOnNextLine: true
+ 
+ 
+# 当函数声明和参数无法放在同一行时，是否将所有参数放在下一行？
+# -- true - 所有参数放在下一行
+# -- false - 不全部放在下一行
+AllowAllParametersOfDeclarationOnNextLine: true
+ 
+ 
+# 是否允许短的枚举放在同一行？
+# -- true - 允许放在同一行
+# -- false - 不允许放在同一行
+AllowShortEnumsOnASingleLine: false
+ 
+ 
+# 是否允许短的代码块放在同一行？
+# -- Never - 不允许放在同一行
+# -- Empty - 只有空的代码块允许放在同一行
+# -- Always - 允许短的代码块放在同一行
+AllowShortBlocksOnASingleLine: Empty
+ 
+ 
+# 允许短的 case 标签和语句放在同一行？
+# -- true - 允许放在同一行
+# -- false - 不允许放在同一行
+AllowShortCaseLabelsOnASingleLine: false
+ 
+ 
+# 是否允许短的函数放在同一行？
+# -- None - 不把短的函数放在同一行
+# -- InlineOnly - 只把类内的内联函数放在同一行，全局的空函数不放在同一行
+# -- Empty - 只把空的函数放在同一行
+# -- Inline - 把类内的内联函数放在同一行，全局的空函数不放在同一行
+# -- All - 都允许放在同一行
+AllowShortFunctionsOnASingleLine: InlineOnly
+ 
+ 
+# 允许短的 lambda 语句放在同一行？
+# -- None - 不把短的 lambda 语句放在同一行
+# -- Empty - 只把空的lambda 语句放在同一行
+# -- Inline - 当短的 lambda 语句作为函数参数时，放在同一行
+# -- All - 将短的 lambda 语句放在同一行
+AllowShortLambdasOnASingleLine: All
+ 
+ 
+# 是否允许短的 if 语句放在同一行？
+# -- Never - 不把短的if语句放在同一行
+# -- WithoutElse - 当没有 else 时，把短的 if 语句放在同一行
+# -- OnlyFirstIf - 把短的 if 语句放在同一行，短的 else if 和 else 不放在同一行
+# -- AllIfsAndElse - 把短的 if、else if、else 语句放在同一行
+AllowShortIfStatementsOnASingleLine: Never
+ 
+ 
+# 是否允许短的循环放在同一行？
+# -- true - 允许放在同一行
+# -- false - 不允许放在同一行
+AllowShortLoopsOnASingleLine: false
+ 
+ 
+# 总是在定义函数的返回类型后换行？
+# -- None - 由 @ref PenaltyReturnTypeOnItsOwnLine 决定
+# -- All - 总是换行
+# -- TopLevel - 在顶层函数（类外函数）中总是换行
+# Note : 该配置已不推荐使用
+AlwaysBreakAfterDefinitionReturnType: None
+ 
+ 
+# 函数声明、定义时，返回值类型的换行方式
+# -- None - 由 @ref PenaltyReturnTypeOnItsOwnLine 决定
+# -- All - 总是在返回值类型后换行
+# -- TopLevel - 仅在顶层函数（类外函数）的声明、定义中换行
+# -- AllDefinitions - 在所有函数的定义中换行
+# -- TopLevelDefinitions - 仅在顶层函数（类外函数）的定义中换行
+AlwaysBreakAfterReturnType: None
+ 
+ 
+# 是否总是在多行string前换行？
+# -- true - 换行
+# -- false - 不换号
+AlwaysBreakBeforeMultilineStrings: false
+ 
+ 
+# 模板声明的换行方式
+# -- None - 由 @ref PenaltyBreakTemplateDeclaration 控制
+# -- MultiLine - 仅在模板声明需要占用多行时换行
+# -- Yes - 总是换行
+AlwaysBreakTemplateDeclarations: MultiLine
+ 
+ 
+# 定义语言或编译器的扩展属性字符串，以免 clang 无法识别
+AttributeMacros:
+  - __capability
+ 
+  
+# 函数调用时，参数的放置规则
+# -- false - 参数要么放在同一行，要么每个参数占用一行
+# -- true - 不做强制要求
+BinPackArguments: false
+ 
+ 
+# 函数声明、定义时，参数的放置规则
+# -- false - 参数要么放在同一行，要么每个参数占用一行
+# -- true - 不做强制要求
+BinPackParameters: false
+ 
+ 
+# 大括号放置风格
+# -- Attach - 大括号紧随前方内容，放在同一行
+# -- Linux - 与 Attach 类似，除了 函数、命名空间、类定义 的大括号放在下一行
+# -- Mozilla - 与 Attach 类似，除了枚举、函数、结构（class\struct\union)的大括号放在下一行
+# -- Stroustrup - 与 Attach 类似，但函数定义前、catch前方、else前方的 {} 放在单独一行
+# -- Allman - 总是换行
+# -- Whitesmiths - 类似 Allman，但 {} 和内部的语句对齐到同样位置
+# -- GNU - 总是换行，但在控制语句后的{} 总是对齐到下一个位置
+# -- WebKit - 与 Attach 类似，但在函数定义前换行 
+# -- Custom - 依赖 @ref BraceWrapping
+BreakBeforeBraces: Custom
+ 
+ 
+# 大括号换行规则，只有当 @ref BreakBeforeBraces 设置为 Custom 时才有效
+BraceWrapping:
+  # 是否在 case 后面换行？ （true\false）
+  AfterCaseLabel:  true
+  
+  # 是否在 class 后换行？（true\false）
+  AfterClass:      true
+  
+  # 控制语句后的换行规则
+  # -- Never - 控制语句后不换行
+  # -- MultiLine - 当控制语句由多行组成时，继续换行
+  # -- Always - 总是换行
+  AfterControlStatement: Always
+  
+  # 是否在枚举定义后换行？（true\false）
+  AfterEnum:       true
+  
+  # 是否在函数后换行？（true\false）
+  AfterFunction:   true
+  
+  # 是否在命名空间后换行？（true\false）
+  AfterNamespace:  true
+  
+  # 是否在 ObjC 定义后换行？（true\false）
+  AfterObjCDeclaration: true
+  
+  # 是否在 struct 定义时换行？（true\false）
+  AfterStruct:     true
+  
+  # 是否在 union 定义后换行？（true\false）
+  AfterUnion:      true
+  
+  # 是否在 extern 后换行？（true\false）
+  AfterExternBlock: true
+  
+  # 是否在 catch 前换行？（true\false）
+  BeforeCatch:     true
+  
+  # 是否在 else 前换行？（true\false）
+  BeforeElse:      true
+  
+  # 是否在 lambda 前换行？（true\false）
+  BeforeLambdaBody: true
+  
+  # 是否在 do-while 的 while 前换行？（true\false）
+  BeforeWhile:     false
+  
+  # 大括号是否参与缩进？
+  IndentBraces:    false
+  
+  # 当空白函数的 {} 和函数名称不需要放在同一行时，是否拆分函数体？
+  # -- false - {} 可以放在同一行
+  # -- true - {} 分别放在两行
+  SplitEmptyFunction: true
+  
+  # 当空白结构（class\struct\union)的 {} 需要放在单独的行时，是否拆分 {} ?
+  # -- false - {} 可以放在同一行
+  # -- true - {} 分别放在两行
+  SplitEmptyRecord: true
+  
+  # 当空白的命名空间的 {} 需要放在单独的行时，是否拆分 {} ？
+  # -- false - {} 可以放在同一行
+  # -- true - {} 分别放在两行
+  SplitEmptyNamespace: true
+  
+  
+# 二元表达式的换行风格
+# -- None - 在操作符后之后换行，操作符位于上一行尾部
+# -- NonAssignment - 除赋值操作符外，其它操作符位于换行后的头部
+# -- All - 所有操作符放在换行后的头部
+BreakBeforeBinaryOperators: None
+ 
+ 
+# 是否在 concept 声明前换行？（true\false）
+BreakBeforeConceptDeclarations: true
+ 
+ 
+# 类的继承列表的分割方式
+# -- BeforeColon - 在冒号 ':' 前方分割，冒号位于行首，逗号','位于行尾
+# -- BeforeComma - 在冒号和逗号前方分割，冒号和逗号都位于行首，并且对齐 
+# -- AfterColon - 在冒号和逗号后方分割，冒号和逗号位于行尾
+# -- AfterComma - 仅在逗号后方分割，冒号和首个基类位于同一行
+BreakInheritanceList: BeforeComma
+ 
+ 
+# ？？ 未找到介绍
+BreakBeforeInheritanceComma: false
+ 
+ 
+# 当三元表达式不能放在同一行时，是否在三元操作符前方换行
+# -- true - 操作符位于新行的首部
+# -- false - 操作符位于上一行的尾部
+BreakBeforeTernaryOperators: true
+ 
+ 
+# 构造函数初始化列表分割方式
+# -- BeforeColon - 在冒号 ':' 前方分割，冒号位于行首，逗号','位于行尾
+# -- BeforeComma - 在冒号和逗号前方分割，冒号和逗号都位于行首，并且对齐 
+# -- AfterColon - 在冒号和逗号后方分割，冒号和逗号位于行尾
+BreakConstructorInitializers: BeforeComma
+ 
+ 
+# ？？未找到介绍
+BreakConstructorInitializersBeforeComma: false
+ 
+# 是否在每个java注解后方换行？（true\false）
+BreakAfterJavaFieldAnnotations: false
+ 
+ 
+# 是否分割过长的字符串？（true\false）
+BreakStringLiterals: true
+ 
+ 
+# 列宽长度限制
+# -- 0 - 0代表没有限制
+ColumnLimit:     80
+ 
+ 
+# 用于匹配注释信息的正则表达式，被匹配的行不会做任何修改
+CommentPragmas:  '^ IWYU pragma:'
+ 
+ 
+# 是否压缩紧接的命名空间？
+# -- true - 将紧跟的命名空间放在同一行
+# -- false - 每个命名空间位于新的一行
+CompactNamespaces: false
+ 
+ 
+# 是否将构造函数的初始化列表放在同一行或各放一行？
+# -- true - 如果可能，初始化列表放在同一行；如果不满足长度选择，则每个单独放一行
+# -- false - 初始化列表可以随意放置
+ConstructorInitializerAllOnOneLineOrOnePerLine: false
+ 
+ 
+# 构造函数的初始化列表和基类集成列表的对齐宽度
+ConstructorInitializerIndentWidth: 4
+ 
+ 
+# 延续语句的对齐宽度
+ContinuationIndentWidth: 4
+ 
+ 
+# C++ 11 初始化列表风格
+# -- true - 
+# -- false - 
+Cpp11BracedListStyle: true
+ 
+ 
+# 是否自动分析行结尾方式？
+# -- true - 自动分析文件的行结尾方式，若无法分析，则使用 @ref UseCRLF
+# -- false - 不自动分析
+DeriveLineEnding: true
+ 
+ 
+# 是否自动分析指针的对齐方式？
+# -- true - 自动分析并使用指针的对齐方式，若无法分析，则使用 @ref PointerAlignment
+# -- false - 不自动分析
+DerivePointerAlignment: false
+ 
+ 
+# 是否禁用格式化？（true\false）
+DisableFormat:   false
+ 
+ 
+# 访问权限控制符（public\protected\private等）后方的空行规则
+# -- Never - 移除所有空行
+# -- Leave - 保留所有空行，受 @ref MaxEmptyLinesToKeep 限制
+# -- Always - 若没有空行，则添加一个空行；若已有空行，则保留，并受 @ref MaxEmptyLinesToKeep 限制
+#EmptyLineAfterAccessModifier: Never
+ 
+ 
+# 访问权限控制符（public\protected\private等）前方的空行规则
+# -- Never - 移除所有空行
+# -- Leave - 保留所有空行
+# -- LogicalBlock - 仅在新的逻辑块前方加空行
+# -- Always - 除第一个外，都在前方加空行
+EmptyLineBeforeAccessModifier: LogicalBlock
+ 
+ 
+# 实验性功能：是否自动分析 bin pack 类型？
+# NOTE : 不建议启用
+ExperimentalAutoDetectBinPacking: false
+ 
+ 
+# 是否自动修正命名空间的结束注释？
+# -- true - 在短的命名空间尾部，自动添加或修改错误的命名空间结束注释
+# -- false - 不自动修正
+FixNamespaceComments: true
+ 
+ 
+# 应该被解释为 foreach 循环，而不是函数调用的宏定义
+ForEachMacros:
+  - foreach
+  - Q_FOREACH
+  - BOOST_FOREACH
+  
+  
+# 需要被忽略的宏定义，这些宏定义类似属性标签 
+StatementAttributeLikeMacros:
+  - Q_EMIT
+ 
+ 
+# 多个 include 块（有空行分隔的include）排序时的分组规则
+# -- Preserve - 保留原有的块分隔，各自排序
+# -- Merge - 将所有的块视为同一个，然后进行排序
+# -- Regroup - 将所有的块视为同一个进行排序，然后按照 @ref IncludeCategories 的规则进行分组
+IncludeBlocks:   Preserve
+ 
+ 
+# 用于 include 排序的规则
+IncludeCategories:
+  - Regex:           '^"(llvm|llvm-c|clang|clang-c)/'
+    Priority:        2
+    SortPriority:    0
+    CaseSensitive:   false
+  - Regex:           '^(<|"(gtest|gmock|isl|json)/)'
+    Priority:        3
+    SortPriority:    0
+    CaseSensitive:   false
+  - Regex:           '.*'
+    Priority:        1
+    SortPriority:    0
+    CaseSensitive:   false
+IncludeIsMainRegex: '(Test)?$'
+IncludeIsMainSourceRegex: ''
+ 
+ 
+# 是否缩进 case 标签？
+# -- true - case 不与 switch 对齐
+# -- false - case 和 switch 对齐
+IndentCaseLabels: false
+ 
+ 
+# 是否缩进 case 对应的大括号 "{}" ？
+# - false - 块语句和case 标签对齐
+# - true - 块语句在 case 标签后缩进
+IndentCaseBlocks: false
+ 
+ 
+# 是否缩进 goto 标签？
+# -- false - goto 位于最左侧，不参与缩进
+# -- true - goto 参与缩进
+IndentGotoLabels: false
+ 
+ 
+# 预处理命令(#if\#ifdef\#endif等)的缩进规则
+# -- None - 不进行缩进
+# -- AfterHash - 在前导'#'后缩进，'#'放在最左侧，之后的语句参与缩进
+# -- BeforeHash - 在前导'#'前进行缩进
+IndentPPDirectives: None
+ 
+ 
+# extern 内容的缩进规则
+# -- AfterExternBlock - 依赖 @ref AfterExternBlock 的配置
+# -- NoIndent - 不进行缩进
+# -- Indent - 进行缩进 
+IndentExternBlock: NoIndent
+ 
+ 
+# 是否缩进模板中的 requires？（true\false）
+IndentRequires:  false
+ 
+ 
+# 缩进宽度
+IndentWidth:     4
+ 
+ 
+# 当函数过长导致换行时，是否进行缩进？（true\false）
+IndentWrappedFunctionNames: false
+ 
+ 
+# 仅用于 JavaScript 的配置，需要配置为 None 
+InsertTrailingCommas: None
+ 
+ 
+# JavaScript 中的字符串引号规则
+# -- Leave - 保持原样
+# -- Single - 全部使用单引号
+# -- Double - 全部使用双引号 
+JavaScriptQuotes: Leave
+ 
+ 
+# 是否在 JavaScript 的 import/export 语句后换行？（true\false）
+JavaScriptWrapImports: true
+ 
+ 
+# 是否在块的起始位置保留空行？（true\false）
+# -- true - 保留块起始的空行
+# -- false - 删除块起始的空行
+KeepEmptyLinesAtTheStartOfBlocks: false
+ 
+ 
+# 用于识别宏定义型块起始的正则表达式
+MacroBlockBegin: ''
+ 
+ 
+# 用于识别宏定义型块结束的正则表达式
+MacroBlockEnd:   ''
+ 
+ 
+# 允许保留的空行行数
+MaxEmptyLinesToKeep: 1
+ 
+ 
+# 命名空间内部的缩进规则
+# -- None - 都不缩进
+# -- Inner - 只缩进嵌套的命名空间内容
+# -- All - 缩进所有命名空间内容
+NamespaceIndentation: None
+ 
+ 
+# Objective-C 相关配置
+ObjCBinPackProtocolList: Auto
+ObjCBlockIndentWidth: 2
+ObjCBreakBeforeNestedBlockParam: true
+ObjCSpaceAfterProperty: false
+ObjCSpaceBeforeProtocolList: true
+ 
+ 
+# ？？惩罚？？
+PenaltyBreakAssignment: 2
+PenaltyBreakBeforeFirstCallParameter: 19
+PenaltyBreakComment: 300
+PenaltyBreakFirstLessLess: 120
+PenaltyBreakString: 1000
+PenaltyBreakTemplateDeclaration: 10
+PenaltyExcessCharacter: 1000000
+PenaltyReturnTypeOnItsOwnLine: 60
+PenaltyIndentedWhitespace: 0
+ 
+ 
+# 指针（*和&）的对齐规则
+# -- Left - * 靠近左侧
+# -- Right - * 靠近右侧
+# -- Middle - * 放在中间
+# NOTE : 在 @ref SpaceAroundPointerQualifiers 为 Default，
+# 	     且 @ref DerivePointerAlignment 失效后启用
+PointerAlignment: Right
+ 
+ 
+# 是否重排注释？（true\false）
+ReflowComments:  true
+ 
+ 
+# include 排序规则
+# -- Never - 不进行排序
+# -- CaseSensitive - 排序时大小写敏感
+# -- CaseInsensitive - 排序时大小写不敏感
+SortIncludes:    true
+ 
+ 
+# java 中静态 import 的排序规则
+# -- Before - 静态放在非静态前方
+# -- After - 静态放在非静态后方
+SortJavaStaticImport: Before
+ 
+ 
+# 是否排序所有 using 声明？（true\false）
+SortUsingDeclarations: true
+ 
+ 
+# 是否在 C 类型的强制转换后加空格？（true\false）
+SpaceAfterCStyleCast: false
+ 
+ 
+# 是否在逻辑取反（!）后加空格？（true\false）
+SpaceAfterLogicalNot: false
+ 
+ 
+# 是否在 template 关键字后加空格？（true\false）
+SpaceAfterTemplateKeyword: true
+ 
+ 
+# 是否在赋值运算符前加空格？（true\false）
+SpaceBeforeAssignmentOperators: true
+ 
+ 
+# 是否在 case 的冒号前添加空格？（true\false）
+SpaceBeforeCaseColon: true
+ 
+ 
+# 是否在 C++11 的初始化列表前加空格？（true\false）
+SpaceBeforeCpp11BracedList: false
+ 
+ 
+# 是否在构造函数的初始化冒号 “:” 前加空格？（true\false）
+SpaceBeforeCtorInitializerColon: true
+ 
+ 
+# 是否在构造函数的继承冒号 “:” 前加空格？（true\false）
+SpaceBeforeInheritanceColon: true
+ 
+ 
+# 小括号“()” 前加空格的规则
+# -- Never - 从不加空格
+# -- ControlStatements - 只在控制语句(for/if/while...)时加空格
+# -- ControlStatementsExceptForEachMacros - 类型 ControlStatements，只是不再 ForEach 后加空格
+# -- Always - 总是添加空格
+# -- NonEmptyParentheses - 类似 Always，只是不再空白括号前加空格  
+SpaceBeforeParens: Always
+ 
+ 
+# 指针前后的空格规则
+# -- Default - 使用 @ref PointerAlignment 控制空格
+# -- Before - 确保指针前有空格
+# -- After - 确保指针后有空格
+# -- Both - 确保前后都有空格
+SpaceAroundPointerQualifiers: Default
+ 
+ 
+# 是否在 for 循环的冒号“:” 前加空格？（true\false）
+SpaceBeforeRangeBasedForLoopColon: true
+ 
+ 
+# 是否在空白的 {} 中添加空格？（true\false）
+SpaceInEmptyBlock: false
+ 
+ 
+# 是否在空白的小括号 () 中添加空格？（true\false）
+SpaceInEmptyParentheses: false
+ 
+ 
+#  注释内容与注释起始符"//" 之间的空格数量
+SpacesBeforeTrailingComments: 1
+ 
+ 
+# 中括号 “<>” 中的空格规格
+# -- Never - 移除所有空格
+# -- Always - 总是添加空格
+# -- Leave - 至多保留1个空格
+#SpacesInAngles:  false
+ 
+ 
+# 是否在条件语句（if/for/switch/while）中添加空格？
+SpacesInConditionalStatement: true
+ 
+ 
+# 是否在容器中添加空格？（true\false）
+SpacesInContainerLiterals: true
+ 
+ 
+# 是否在 C 类型的强制转换的小括号内加空格？（true\false）
+SpacesInCStyleCastParentheses: false
+ 
+ 
+# 是否在小括号中加空格？（true\false）
+SpacesInParentheses: true
+ 
+ 
+# 是否在中括号中加空格？（true\false）
+# NOTE：当中括号内没有数据时，不受本规则影响（如空白的lambda 捕获表、不定长度的数组声明）
+SpacesInSquareBrackets: false
+ 
+ 
+# 是否在方括号前方加空格？（true\false）
+# NOTE 1: lambda 捕获表不受影响
+# NOTE 2: 连续的方括号，仅在第一个方括号前加空格
+SpaceBeforeSquareBrackets: false
+ 
+ 
+# 位域中冒号":" 的添加规则
+# -- Both - 在前后都加空格
+# -- None - 在前后都不加空格，除非受 @ref AlignConsecutiveBitFields 影响
+# -- Before - 只在前方加空格
+# -- After -- 只在后方加空格
+BitFieldColonSpacing: Both
+ 
+ 
+# 语言标准
+Standard:        Latest
+ 
+ 
+# 应被视为表达式的宏定义列表
+# NOTE : 主要用于宏扩展后自带分包的语句
+StatementMacros:
+  - Q_UNUSED
+  - QT_REQUIRE_VERSION
+ 
+ 
+# tab 宽度
+TabWidth:        4
+ 
+ 
+# 使用使用 "\r\n" 作为换行？（true\false）
+UseCRLF:         false
+ 
+ 
+# 是否使用 tab
+# -- Never - 从不使用
+# -- ForIndentation - 仅用于缩进
+# -- ForContinuationAndIndentation - 
+# -- AlignWithSpaces -
+# -- Always - 
+UseTab:          Never
+ 
+ 
+# 对括号敏感的宏定义列表，不允许修改这些宏定义
+WhitespaceSensitiveMacros:
+  - STRINGIZE
+  - PP_STRINGIZE
+  - BOOST_PP_STRINGIZE
+  - NS_SWIFT_NAME
+  - CF_SWIFT_NAME
+...
+```
+
+或参考下面这个：
 
 ```sh
 # 语言: None, Cpp, Java, JavaScript, ObjC, Proto, TableGen, TextProto #  
@@ -357,113 +1051,112 @@ TabWidth:   4
 UseTab: Never  
 ```
 
-### TODO
+### 自用
 
-后期熟悉`clang-format`的用法及相应参数时，**维护**一个自己常用的编码风格的格式文件`.clang-format`。
+后期熟悉`clang-format`的用法及相应参数时，**维护**一个自己常用的编码风格的格式文件`.clang-format`。（下面的`.clang-format`已经运行过，注意不要使用汉字）
 
 ```sh
-# Sean 自用.clang-format
-Language:        Cpp
-# BasedOnStyle:  Google
-AccessModifierOffset: -4
-AlignAfterOpenBracket: Align
-AlignConsecutiveMacros: true
+# Sean's own format
+
+Language:   Cpp
+BasedOnStyle:   Google
+AccessModifierOffset:   -4
+#AlignAfterOpenBracket: DontAlign
 AlignConsecutiveAssignments: true
-AlignConsecutiveBitFields: true
+AlignConsecutiveBitFields: true 
 AlignConsecutiveDeclarations: true
+AlignConsecutiveMacros: true 
 AlignEscapedNewlines: Right
 AlignOperands:   Align
 AlignTrailingComments: true
 AllowAllArgumentsOnNextLine: true
-AllowAllConstructorInitializersOnNextLine: true
 AllowAllParametersOfDeclarationOnNextLine: true
-AllowShortEnumsOnASingleLine: true
 AllowShortBlocksOnASingleLine: Never
 AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: false
-AllowShortLambdasOnASingleLine: All
 AllowShortIfStatementsOnASingleLine: Never
+AllowShortLambdasOnASingleLine: All
 AllowShortLoopsOnASingleLine: false
-AlwaysBreakAfterDefinitionReturnType: None
 AlwaysBreakAfterReturnType: None
 AlwaysBreakBeforeMultilineStrings: false
-AlwaysBreakTemplateDeclarations: MultiLine
+AlwaysBreakTemplateDeclarations: Yes
 BinPackArguments: true
 BinPackParameters: true
+BitFieldColonSpacing: Both
 BraceWrapping:
   AfterCaseLabel:  true
   AfterClass:      true
-  AfterControlStatement: true
+  AfterControlStatement: Always
   AfterEnum:       true
   AfterFunction:   true
   AfterNamespace:  true
-  AfterObjCDeclaration: false
+  AfterObjCDeclaration: true
   AfterStruct:     true
   AfterUnion:      true
   AfterExternBlock: true
   BeforeCatch:     true
   BeforeElse:      true
-  BeforeLambdaBody: true
+  BeforeLambdaBody: false
   BeforeWhile:     true
-  IndentBraces:    false
+  IndentBraces:    false        # not confirm
   SplitEmptyFunction: true
   SplitEmptyRecord: true
   SplitEmptyNamespace: true
+BreakAfterJavaFieldAnnotations: true
 BreakBeforeBinaryOperators: None
 BreakBeforeBraces: Custom
-BreakBeforeInheritanceComma: false
-BreakInheritanceList: BeforeColon
-BreakBeforeTernaryOperators: true
-BreakConstructorInitializersBeforeComma: false
-BreakConstructorInitializers: BeforeColon
-BreakAfterJavaFieldAnnotations: false
+BreakBeforeConceptDeclarations: true
+BreakBeforeTernaryOperators: false
+BreakConstructorInitializers: AfterColon
+BreakInheritanceList: AfterColon
 BreakStringLiterals: true
 ColumnLimit:     120
 CommentPragmas:  '^ IWYU pragma:'
 CompactNamespaces: false
-ConstructorInitializerAllOnOneLineOrOnePerLine: false
 ConstructorInitializerIndentWidth: 4
 ContinuationIndentWidth: 4
 Cpp11BracedListStyle: true
 DeriveLineEnding: true
 DerivePointerAlignment: false
 DisableFormat:   false
+EmptyLineBeforeAccessModifier: Always
 ExperimentalAutoDetectBinPacking: false
 FixNamespaceComments: true
-ForEachMacros:
+ForEachMacros:  # not confirm
   - foreach
   - Q_FOREACH
   - BOOST_FOREACH
-IncludeBlocks:   Preserve
-IncludeCategories:
+IncludeBlocks:   Regroup
+IncludeCategories:  # not confirm
   - Regex:           '^"(llvm|llvm-c|clang|clang-c)/'
     Priority:        2
-    SortPriority:    0
-  - Regex:           '^(<|"(gtest|gmock|isl|json)/)'
+    SortPriority:    2
+    CaseSensitive:   true
+  - Regex:           '^((<|")(gtest|gmock|isl|json)/)'
     Priority:        3
-    SortPriority:    0
+  - Regex:           '<[[:alnum:].]+>'
+    Priority:        4
   - Regex:           '.*'
     Priority:        1
     SortPriority:    0
-IncludeIsMainRegex: '(Test)?$'
-IncludeIsMainSourceRegex: ''
-IndentCaseLabels: false
+IncludeIsMainRegex: '(Test)?$'  # not confirm
+IncludeIsMainSourceRegex: ''  # not confirm
+# IndentAccessModifiers: false   # not confirm
 IndentCaseBlocks: false
+IndentCaseLabels: false
+IndentExternBlock: AfterExternBlock
 IndentGotoLabels: true
 IndentPPDirectives: None
-IndentExternBlock: AfterExternBlock
-IndentWidth:     4
+IndentWidth: 4
 IndentWrappedFunctionNames: false
-InsertTrailingCommas: None
-JavaScriptQuotes: Leave
-JavaScriptWrapImports: true
-KeepEmptyLinesAtTheStartOfBlocks: true
+KeepEmptyLinesAtTheStartOfBlocks: false
 MacroBlockBegin: ''
 MacroBlockEnd:   ''
 MaxEmptyLinesToKeep: 1
 NamespaceIndentation: None
 ObjCBinPackProtocolList: Auto
-ObjCBlockIndentWidth: 2
+ObjCBlockIndentWidth: 4
 ObjCBreakBeforeNestedBlockParam: true
 ObjCSpaceAfterProperty: false
 ObjCSpaceBeforeProtocolList: true
@@ -477,27 +1170,28 @@ PenaltyExcessCharacter: 1000000
 PenaltyReturnTypeOnItsOwnLine: 60
 PointerAlignment: Right
 ReflowComments:  true
-SortIncludes:    true
+SortIncludes:    CaseInsensitive
 SortUsingDeclarations: true
 SpaceAfterCStyleCast: false
 SpaceAfterLogicalNot: false
-SpaceAfterTemplateKeyword: true
+SpaceAfterTemplateKeyword: false
 SpaceBeforeAssignmentOperators: true
-SpaceBeforeCpp11BracedList: false
+SpaceBeforeCaseColon: false
+SpaceBeforeCpp11BracedList: true
 SpaceBeforeCtorInitializerColon: true
 SpaceBeforeInheritanceColon: true
 SpaceBeforeParens: ControlStatements
 SpaceBeforeRangeBasedForLoopColon: true
+SpaceBeforeSquareBrackets: false
 SpaceInEmptyBlock: false
 SpaceInEmptyParentheses: false
-SpacesBeforeTrailingComments: 1
+SpacesBeforeTrailingComments: 4
 SpacesInAngles:  false
 SpacesInConditionalStatement: false
-SpacesInContainerLiterals: true
+SpacesInContainerLiterals: false
 SpacesInCStyleCastParentheses: false
 SpacesInParentheses: false
 SpacesInSquareBrackets: false
-SpaceBeforeSquareBrackets: false
 Standard:        Latest
 StatementMacros:
   - Q_UNUSED
@@ -593,232 +1287,273 @@ $ clang-tidy -checks="-*,misc-unused-using-decls" path/to/project/a.cc
 
 ## Linux下使用
 
-1. 安装
+### 安装
 
-   方式1：通过 [Github - cpplint](https://github.com/google/styleguide/blob/gh-pages/cpplint/cpplint.py) 下载，得到`cpplint.py`文件；使用时可采用`$ python cpplint.py temp.cpp`的方式；（但这种方式略显麻烦）
+方式1：通过 [Github - cpplint](https://github.com/google/styleguide/blob/gh-pages/cpplint/cpplint.py) 下载，得到`cpplint.py`文件；使用时可采用`$ python cpplint.py temp.cpp`的方式；（但这种方式略显麻烦）
 
-   方式2：使用`pip`安装(`pip`是`python`包管理工具，该工具提供了对`python`包的查找、下载、安装和卸载功能)；使用时可采用`$ cpplint temp.cpp`方式；使用方式2安装时遇到过的问题：
+方式2：使用`pip`安装(`pip`是`python`包管理工具，该工具提供了对`python`包的查找、下载、安装和卸载功能)；使用时可采用`$ cpplint temp.cpp`方式；使用方式2安装时遇到过的问题：
 
-   - 使用`$pip install cpplint`安装时安装失败并提示`pip`版本低（Ubuntu 16.04 虚拟机）：
+- 使用`$pip install cpplint`安装时安装失败并提示`pip`版本低（Ubuntu 16.04 虚拟机）：
 
-     ```sh
-     You are using pip version 8.1.1, however version 22.1 is available.
-     You should consider upgrading via the 'pip install --upgrade pip' command.
-     ```
+  ```sh
+  You are using pip version 8.1.1, however version 22.1 is available.
+  You should consider upgrading via the 'pip install --upgrade pip' command.
+  ```
 
-     然后使用它推荐的`$ pip install --upgrade pip`命令依然会出现上述问题。
+  然后使用它推荐的`$ pip install --upgrade pip`命令依然会出现上述问题。
 
-     解决方法1：使用命令`sudo -H python -m pip install --upgrade pip`；参考：[ubuntu16.04 更新pip](https://blog.csdn.net/Kangyucheng/article/details/79978953); 
+  解决方法1：使用命令`sudo -H python -m pip install --upgrade pip`；参考：[ubuntu16.04 更新pip](https://blog.csdn.net/Kangyucheng/article/details/79978953); 
 
-     但该方法未解决我的情况，报下面错误：
+  但该方法未解决我的情况，报下面错误：
 
-     ```sh
-     $ sudo -H python -m pip install --upgrade pip
-     Collecting pip
-       Downloading https://files.pythonhosted.org/packages/99/bb/696e256f4f445809f25efd4e4ce42ff99664dc089cafa1e097d5fec7fc33/pip-22.1.tar.gz (2.1MB)
-         100% |████████████████████████████████| 2.1MB 45kB/s 
-         Complete output from command python setup.py egg_info:
-         Traceback (most recent call last):
-           File "<string>", line 1, in <module>
-           File "/tmp/pip-build-xs6o0g/pip/setup.py", line 7
-             def read(rel_path: str) -> str:
-                              ^
-         SyntaxError: invalid syntax
-     ```
+  ```sh
+  $ sudo -H python -m pip install --upgrade pip
+  Collecting pip
+    Downloading https://files.pythonhosted.org/packages/99/bb/696e256f4f445809f25efd4e4ce42ff99664dc089cafa1e097d5fec7fc33/pip-22.1.tar.gz (2.1MB)
+      100% |████████████████████████████████| 2.1MB 45kB/s 
+      Complete output from command python setup.py egg_info:
+      Traceback (most recent call last):
+        File "<string>", line 1, in <module>
+        File "/tmp/pip-build-xs6o0g/pip/setup.py", line 7
+          def read(rel_path: str) -> str:
+                           ^
+      SyntaxError: invalid syntax
+  ```
 
-     解决方法2：去 [官网下载](https://pypi.org/project/pip/#files) `pip`文件，再手动解压、安装；（参考 [Ubuntu16.04 python pip版本过低，更新一直出错](https://blog.csdn.net/moguchen/article/details/84502708) ）
+  解决方法2：去 [官网下载](https://pypi.org/project/pip/#files) `pip`文件，再手动解压、安装；（参考 [Ubuntu16.04 python pip版本过低，更新一直出错](https://blog.csdn.net/moguchen/article/details/84502708) ）
 
-     但解压（`tar -zvxf pip-xxx.tar.gz`）安装（进入解压后的目录`cd pip-xxx`，再`sudo python setup.py install`）时也会报类似上述的错误：
+  但解压（`tar -zvxf pip-xxx.tar.gz`）安装（进入解压后的目录`cd pip-xxx`，再`sudo python setup.py install`）时也会报类似上述的错误：
 
-     ```sh
-     sean@sean-virtual-machine:~/download/pip-22.1$ python setup.py install
-       File "setup.py", line 7
-         def read(rel_path: str) -> str:
-                          ^
-     SyntaxError: invalid syntax
-     ```
+  ```sh
+  sean@sean-virtual-machine:~/download/pip-22.1$ python setup.py install
+    File "setup.py", line 7
+      def read(rel_path: str) -> str:
+                       ^
+  SyntaxError: invalid syntax
+  ```
 
-     上述语法错误的解决方法：（参考 [pip升级报错：def read(rel_path: str) -＞ str SyntaxError: invalid syntax](https://blog.csdn.net/sunkangke/article/details/123530119) ）
+  上述语法错误的解决方法：（参考 [pip升级报错：def read(rel_path: str) -＞ str SyntaxError: invalid syntax](https://blog.csdn.net/sunkangke/article/details/123530119) ）
 
-     ```sh
-     python -m pip install --user --upgrade pip==20.2.4
-     /usr/bin/python -m pip install --upgrade pip
-     ```
+  ```sh
+  python -m pip install --user --upgrade pip==20.2.4
+  /usr/bin/python -m pip install --upgrade pip
+  ```
 
-     结果如下：
+  结果如下：
 
-     ```sh
-     $ python -m pip install --user --upgrade pip==20.2.4
-     Collecting pip==20.2.4
-       Downloading https://files.pythonhosted.org/packages/cb/28/91f26bd088ce8e22169032100d4260614fc3da435025ff389ef1d396a433/pip-20.2.4-py2.py3-none-any.whl (1.5MB)
-         100% |████████████████████████████████| 1.5MB 41kB/s 
-     Installing collected packages: pip
-     Successfully installed pip-8.1.1
-     You are using pip version 8.1.1, however version 22.1 is available.
-     You should consider upgrading via the 'pip install --upgrade pip' command.
-     sean@sean-virtual-machine:~/workspace/cpp/deletable/SHNet$ /usr/bin/python -m pip install --upgrade pip
-     DEPRECATION: Python 2.7 reached the end of its life on January 1st, 2020. Please upgrade your Python as Python 2.7 is no longer maintained. pip 21.0 will drop support for Python 2.7 in January 2021. More details about Python 2 support in pip can be found at https://pip.pypa.io/en/latest/development/release-process/#python-2-support pip 21.0 will remove support for this functionality.
-     Defaulting to user installation because normal site-packages is not writeable
-     Collecting pip
-       Downloading pip-20.3.4-py2.py3-none-any.whl (1.5 MB)
-          |████████████████████████████████| 1.5 MB 32 kB/s 
-     Installing collected packages: pip
-       Attempting uninstall: pip
-         Found existing installation: pip 20.2.4
-         Uninstalling pip-20.2.4:
-           Successfully uninstalled pip-20.2.4
-     Successfully installed pip-20.3.4
-     ```
+  ```sh
+  $ python -m pip install --user --upgrade pip==20.2.4
+  Collecting pip==20.2.4
+    Downloading https://files.pythonhosted.org/packages/cb/28/91f26bd088ce8e22169032100d4260614fc3da435025ff389ef1d396a433/pip-20.2.4-py2.py3-none-any.whl (1.5MB)
+      100% |████████████████████████████████| 1.5MB 41kB/s 
+  Installing collected packages: pip
+  Successfully installed pip-8.1.1
+  You are using pip version 8.1.1, however version 22.1 is available.
+  You should consider upgrading via the 'pip install --upgrade pip' command.
+  sean@sean-virtual-machine:~/workspace/cpp/deletable/SHNet$ /usr/bin/python -m pip install --upgrade pip
+  DEPRECATION: Python 2.7 reached the end of its life on January 1st, 2020. Please upgrade your Python as Python 2.7 is no longer maintained. pip 21.0 will drop support for Python 2.7 in January 2021. More details about Python 2 support in pip can be found at https://pip.pypa.io/en/latest/development/release-process/#python-2-support pip 21.0 will remove support for this functionality.
+  Defaulting to user installation because normal site-packages is not writeable
+  Collecting pip
+    Downloading pip-20.3.4-py2.py3-none-any.whl (1.5 MB)
+       |████████████████████████████████| 1.5 MB 32 kB/s 
+  Installing collected packages: pip
+    Attempting uninstall: pip
+      Found existing installation: pip 20.2.4
+      Uninstalling pip-20.2.4:
+        Successfully uninstalled pip-20.2.4
+  Successfully installed pip-20.3.4
+  ```
 
-     终于把`pip`安装成功了，此时继续用`$pip install cpplint`安装`cpplint`；又报下面的错误：
+  终于把`pip`安装成功了，此时继续用`$pip install cpplint`安装`cpplint`；又报下面的错误：
 
-     ```sh
-     $ pip2 install cpplint
-     DEPRECATION: Python 2.7 reached the end of its life on January 1st, 2020. Please upgrade your Python as Python 2.7 is no longer maintained. pip 21.0 will drop support for Python 2.7 in January 2021. More details about Python 2 support in pip can be found at https://pip.pypa.io/en/latest/development/release-process/#python-2-support pip 21.0 will remove support for this functionality.
-     Defaulting to user installation because normal site-packages is not writeable
-     Collecting cpplint
-       Using cached cpplint-1.6.0.tar.gz (361 kB)
-         ERROR: Command errored out with exit status 1:
-          command: /usr/bin/python -c 'import sys, setuptools, tokenize; sys.argv[0] = '"'"'/tmp/pip-install-ppKaie/cpplint/setup.py'"'"'; __file__='"'"'/tmp/pip-install-ppKaie/cpplint/setup.py'"'"';f=getattr(tokenize, '"'"'open'"'"', open)(__file__);code=f.read().replace('"'"'\r\n'"'"', '"'"'\n'"'"');f.close();exec(compile(code, __file__, '"'"'exec'"'"'))' egg_info --egg-base /tmp/pip-pip-egg-info-mC0NZr
-              cwd: /tmp/pip-install-ppKaie/cpplint/
-         Complete output (23 lines):
-         Couldn't find index page for 'pytest-runner' (maybe misspelled?)
-         No local packages or download links found for pytest-runner==5.2
-         Traceback (most recent call last):
-           ...
-         ----------------------------------------
-     ERROR: Command errored out with exit status 1: python setup.py egg_info Check the logs for full command output.
-     ```
+  ```sh
+  $ pip2 install cpplint
+  DEPRECATION: Python 2.7 reached the end of its life on January 1st, 2020. Please upgrade your Python as Python 2.7 is no longer maintained. pip 21.0 will drop support for Python 2.7 in January 2021. More details about Python 2 support in pip can be found at https://pip.pypa.io/en/latest/development/release-process/#python-2-support pip 21.0 will remove support for this functionality.
+  Defaulting to user installation because normal site-packages is not writeable
+  Collecting cpplint
+    Using cached cpplint-1.6.0.tar.gz (361 kB)
+      ERROR: Command errored out with exit status 1:
+       command: /usr/bin/python -c 'import sys, setuptools, tokenize; sys.argv[0] = '"'"'/tmp/pip-install-ppKaie/cpplint/setup.py'"'"'; __file__='"'"'/tmp/pip-install-ppKaie/cpplint/setup.py'"'"';f=getattr(tokenize, '"'"'open'"'"', open)(__file__);code=f.read().replace('"'"'\r\n'"'"', '"'"'\n'"'"');f.close();exec(compile(code, __file__, '"'"'exec'"'"'))' egg_info --egg-base /tmp/pip-pip-egg-info-mC0NZr
+           cwd: /tmp/pip-install-ppKaie/cpplint/
+      Complete output (23 lines):
+      Couldn't find index page for 'pytest-runner' (maybe misspelled?)
+      No local packages or download links found for pytest-runner==5.2
+      Traceback (most recent call last):
+        ...
+      ----------------------------------------
+  ERROR: Command errored out with exit status 1: python setup.py egg_info Check the logs for full command output.
+  ```
 
-     上述问题的核心是：`Couldn't find index page for 'pytest-runner'`，进一步安装`pytest-runne`：
+  上述问题的核心是：`Couldn't find index page for 'pytest-runner'`，进一步安装`pytest-runne`：
 
-     ```sh
-     sean@sean-virtual-machine:~$ pip install pytest-runner
-     DEPRECATION: Python 2.7 reached the end of its life on January 1st, 2020. Please upgrade your Python as Python 2.7 is no longer maintained. pip 21.0 will drop support for Python 2.7 in January 2021. More details about Python 2 support in pip can be found at https://pip.pypa.io/en/latest/development/release-process/#python-2-support pip 21.0 will remove support for this functionality.
-     Defaulting to user installation because normal site-packages is not writeable
-     Collecting pytest-runner
-       Downloading pytest_runner-5.2-py2.py3-none-any.whl (6.8 kB)
-     Installing collected packages: pytest-runner
-     Successfully installed pytest-runner-5.2
-     ```
+  ```sh
+  sean@sean-virtual-machine:~$ pip install pytest-runner
+  DEPRECATION: Python 2.7 reached the end of its life on January 1st, 2020. Please upgrade your Python as Python 2.7 is no longer maintained. pip 21.0 will drop support for Python 2.7 in January 2021. More details about Python 2 support in pip can be found at https://pip.pypa.io/en/latest/development/release-process/#python-2-support pip 21.0 will remove support for this functionality.
+  Defaulting to user installation because normal site-packages is not writeable
+  Collecting pytest-runner
+    Downloading pytest_runner-5.2-py2.py3-none-any.whl (6.8 kB)
+  Installing collected packages: pytest-runner
+  Successfully installed pytest-runner-5.2
+  ```
 
-     成功后再安装`cpplint`：
+  成功后再安装`cpplint`：
 
-     ```sh
-     sean@sean-virtual-machine:~$ pip2 install cpplint
-     DEPRECATION: Python 2.7 reached the end of its life on January 1st, 2020. Please upgrade your Python as Python 2.7 is no longer maintained. pip 21.0 will drop support for Python 2.7 in January 2021. More details about Python 2 support in pip can be found at https://pip.pypa.io/en/latest/development/release-process/#python-2-support pip 21.0 will remove support for this functionality.
-     Defaulting to user installation because normal site-packages is not writeable
-     Collecting cpplint
-       Using cached cpplint-1.6.0.tar.gz (361 kB)
-     Building wheels for collected packages: cpplint
-       Building wheel for cpplint (setup.py) ... done
-       Created wheel for cpplint: filename=cpplint-1.6.0-py2-none-any.whl size=78208 sha256=268fd464aee85db577388ac7707a1f3f7fcf79cf857af3e0c216f45e6daf2af0
-       Stored in directory: /home/sean/.cache/pip/wheels/33/00/8a/90118bbb8d930b8c1a6f40a9b9f6dfa8ec02d2111c67bdd8b3
-     Successfully built cpplint
-     Installing collected packages: cpplint
-     Successfully installed cpplint-1.6.0
-     ```
+  ```sh
+  sean@sean-virtual-machine:~$ pip2 install cpplint
+  DEPRECATION: Python 2.7 reached the end of its life on January 1st, 2020. Please upgrade your Python as Python 2.7 is no longer maintained. pip 21.0 will drop support for Python 2.7 in January 2021. More details about Python 2 support in pip can be found at https://pip.pypa.io/en/latest/development/release-process/#python-2-support pip 21.0 will remove support for this functionality.
+  Defaulting to user installation because normal site-packages is not writeable
+  Collecting cpplint
+    Using cached cpplint-1.6.0.tar.gz (361 kB)
+  Building wheels for collected packages: cpplint
+    Building wheel for cpplint (setup.py) ... done
+    Created wheel for cpplint: filename=cpplint-1.6.0-py2-none-any.whl size=78208 sha256=268fd464aee85db577388ac7707a1f3f7fcf79cf857af3e0c216f45e6daf2af0
+    Stored in directory: /home/sean/.cache/pip/wheels/33/00/8a/90118bbb8d930b8c1a6f40a9b9f6dfa8ec02d2111c67bdd8b3
+  Successfully built cpplint
+  Installing collected packages: cpplint
+  Successfully installed cpplint-1.6.0
+  ```
 
-     可以使用`cpplint --help`查看使用方法。
+  可以使用`cpplint --help`查看使用方法。
 
-2. 使用
+### 使用
 
-   - 检测单个文件：
+- 检测单个文件：
 
-     temp.cpp内容如下：
+  temp.cpp内容如下：
 
-     ```c++
-     #include <iostream>
-     
-     void Print()
-     {
-         std::cout << "Hello world." << std::endl;
-     }
-     
-     int main()
-     {
-         Print();
-         return 0;
-     }
-     ```
+  ```c++
+  #include <iostream>
+  
+  void Print()
+  {
+      std::cout << "Hello world." << std::endl;
+  }
+  
+  int main()
+  {
+      Print();
+      return 0;
+  }
+  ```
 
-     运行及结果：
+  运行及结果：
 
-     ```sh
-     sean@sean-virtual-machine:~/workspace/SHNet$ python cpplint.py temp.cpp 
-     temp.cpp:0:  No copyright message found.  You should have a line: "Copyright [year] <Copyright Owner>"  [legal/copyright] [5]
-     temp.cpp:4:  { should almost always be at the end of the previous line  [whitespace/braces] [4]
-     temp.cpp:9:  { should almost always be at the end of the previous line  [whitespace/braces] [4]
-     Done processing temp.cpp
-     Total errors found: 3
-     ```
+  ```sh
+  sean@sean-virtual-machine:~/workspace/SHNet$ python cpplint.py temp.cpp 
+  temp.cpp:0:  No copyright message found.  You should have a line: "Copyright [year] <Copyright Owner>"  [legal/copyright] [5]
+  temp.cpp:4:  { should almost always be at the end of the previous line  [whitespace/braces] [4]
+  temp.cpp:9:  { should almost always be at the end of the previous line  [whitespace/braces] [4]
+  Done processing temp.cpp
+  Total errors found: 3
+  ```
 
-     或者:`$ python2 cpplint.py temp.cpp`，即指明是`python2`。
+  或者:`$ python2 cpplint.py temp.cpp`，即指明是`python2`。
 
-     修改后：
+  修改后：
 
-     ```c++
-     // Copyright (c) 2022 Sean. All rights reserved.
-     void Print(){
-         std::cout << "Hello world." << std::endl;
-     }
-     
-     int main(){
-         Print();
-         return 0;
-     }
-     ```
+  ```c++
+  // Copyright (c) 2022 Sean. All rights reserved.
+  void Print(){
+      std::cout << "Hello world." << std::endl;
+  }
+  
+  int main(){
+      Print();
+      return 0;
+  }
+  ```
 
-     使用`$ cpplint temp.cpp`(把当前目录的`cpplint.py`文件去掉)，结果如下：
+  使用`$ cpplint temp.cpp`(把当前目录的`cpplint.py`文件去掉)，结果如下：
 
-     ```sh
-     sean@sean-virtual-machine:~/workspace/SHNet$ cpplint temp.cpp
-     Done processing temp.cpp
-     ```
+  ```sh
+  sean@sean-virtual-machine:~/workspace/SHNet$ cpplint temp.cpp
+  Done processing temp.cpp
+  ```
 
-   - 检测批量文件：
+- 检测批量文件：
 
-     根据要检测的文件编写`shell`脚本，然后运行。示例如下：
+  根据要检测的文件编写`shell`脚本，然后运行。示例如下：
 
-     ```sh
-     #! /bin/bash
-     echo "^@^cpplint code style check through shell====^@^"
-     index=0
-     config=""
-     pwd_path=`pwd`
-     cpplint_path="$pwd_path/cpplint.py"
-     echo cpplint_path=$cpplint_path
-     
-     src_path="$pwd_path/src"
-     echo src_path=$src_path
-     # add file to an array,and check file in array last
-     # for file in `find $src_path -name "*.h" -type f`
-     for file in `find $src_path -maxdepth 1 -type f | grep -E "\.h$|\.cc$|\.cu$|\.cpp$"`
-     do
-         echo file=$file
-         echo -e "\033[36m ===> [FILE] \033[0m \033[47;31m $file \033[0m"
-         check_files[$index]=$file
-         index=$(($index+1))
-     done
-     # accroding to config options make a checking command
-     # first check if python2 exists
-     check_cmd=""
-     is_python2_exists=`ls /usr/bin/ | grep -E '^python2$' | wc -l`
-     if [ $is_python2_exists -ge 1 ]
-     then
-         # read cpplint.ini to decide which option to add
-         for file in ${check_files[*]}
-         do
-             check_cmd="python2 $cpplint_path --linelength=80"
-             echo -e "\033[33m =========== check file $file =============\033[0m"
-             check_cmd="$check_cmd"$file
-             eval $check_cmd
-             echo -e "\033[45m ==========================================\033[0m"
-         done
-     fi
-     ```
+  ```sh
+  #! /bin/bash
+  echo "^@^cpplint code style check through shell====^@^"
+  index=0
+  config=""
+  pwd_path=`pwd`
+  cpplint_path="$pwd_path/cpplint.py"
+  echo cpplint_path=$cpplint_path
+  
+  src_path="$pwd_path/src"
+  echo src_path=$src_path
+  # add file to an array,and check file in array last
+  # for file in `find $src_path -name "*.h" -type f`
+  for file in `find $src_path -maxdepth 1 -type f | grep -E "\.h$|\.cc$|\.cu$|\.cpp$"`
+  do
+      echo file=$file
+      echo -e "\033[36m ===> [FILE] \033[0m \033[47;31m $file \033[0m"
+      check_files[$index]=$file
+      index=$(($index+1))
+  done
+  # accroding to config options make a checking command
+  # first check if python2 exists
+  check_cmd=""
+  is_python2_exists=`ls /usr/bin/ | grep -E '^python2$' | wc -l`
+  if [ $is_python2_exists -ge 1 ]
+  then
+      # read cpplint.ini to decide which option to add
+      for file in ${check_files[*]}
+      do
+          check_cmd="python2 $cpplint_path --linelength=80"
+          echo -e "\033[33m =========== check file $file =============\033[0m"
+          check_cmd="$check_cmd"$file
+          eval $check_cmd
+          echo -e "\033[45m ==========================================\033[0m"
+      done
+  fi
+  ```
 
-     运行：`$sudo bash cpplint_shell.sh`;
+  运行：`$sudo bash cpplint_shell.sh`;
+  
+- 自定义使用
+
+  参考：[cpplint中filter参数的每个可选项的含义](https://blog.csdn.net/albertsh/article/details/118076005); [代码风格审查工具Cpplint](https://cloud.tencent.com/developer/article/1494003); 
+
+  使用`cpplint --help`可以得到其详细语法说明：
+
+  ```sh
+  Syntax: cpplint.py [--verbose=#] [--output=emacs|eclipse|vs7|junit|sed|gsed]
+                     [--filter=-x,+y,...]
+                     [--counting=total|toplevel|detailed] [--root=subdir]
+                     [--repository=path]
+                     [--linelength=digits] [--headers=x,y,...]
+                     [--recursive]
+                     [--exclude=path]
+                     [--extensions=hpp,cpp,...]
+                     [--includeorder=default|standardcfirst]
+                     [--quiet]
+                     [--version]
+          <file> [file] ...
+  ```
+
+  注意第2行的`[--filter=-x,+y,...]`，可以使用这种命令进行自定义地过滤。
+
+  常见报错原因有：
+
+  1. Tab found; better to use spaces 没有使用四个空格代替缩进
+  2. Lines should be <= 80 characters long 存在大于80字符的行
+  3. Should have a space between // and comment 应该在//和注释之间有一个空格
+  4. An else should appear on the same line as the preceding }
+  5. If an else has a brace on one side, it should have it on both [readability/braces] 上两个错误经常一起出现，为大括号的位置不合规范
+  6. Extra space for operator ++; ++符号和变量间不能有空格
+  7. Redundant blank line at the end of a code block should be deleted. 代码块最后的空行应该被删除
+  8. Line contains invalid UTF-8 (or Unicode replacement character) 使用了中文注释报的错
+  9. Line ends in whitespace. 代码行最后存在空格
+  10. Include the directory when naming .h files  [build/include_subdir] [4]
+
+  以第10种情况为例，可以按要求进行修改（比如，修改前是 `#include "server.h"`，修改后是`#include "./server.h"`，所在文件与`server.h`位于同一个`include`目录下）；或者对该报错进行飞屏蔽，方法可以是：
+
+  - 在报错语句所在行后面添加注释`// NOLINT`；如`#include "server.h"    // NOLINT`; 【注意`NOLINT`需是大写】
+  - 输入y`cpplint`命令时，添加`--filter`条件过滤；如：`$ cpplint --filter=-build/include_subdir,+readability/braces test.h` ;其中`-`号表示屏蔽，`+`号表示取消屏蔽，`build/include_subdir`就是出错的标识（中括号中间的内容），多个条件时中间以逗号`,`隔开。
 
 ## cpplint 与 clang-tidy 区别
 

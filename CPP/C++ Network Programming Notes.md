@@ -3454,37 +3454,37 @@ sean@sean-virtual-machine:~/workspace/cpp/deletable/SHNet/build$ cmake ..
 
 然后使用CMake生成Makefile：
 
-```
-cmake ..
+```sh
+SHNet/build$ cmake ..
 ```
 
 生成Makefile后，使用以下命令进行代码格式化:
 
-```
-make format
+```sh
+SHNet/build$ make format
 ```
 
 然后用cpplint检查代码:
 
-```
-make cpplint
+```sh
+SHNet/build$ make cpplint
 ```
 
 最后使用clang-tidy进行代码分析：
 
-```
-make clang-tidy
+```sh
+SHNet/build$ make clang-tidy
 ```
 
 将所有的警告都修改好，重新运行这三个命令直到全部通过。然后使用`make`指令即可编译整个网络库，会被保存到`lib`文件夹中，但这里没有可执行文件。如果我们需要编译可执行服务器，需要编译`test`目录下相应的源文件:
 
-```
-make server
-make multiple_client
-make single_client
+```sh
+SHNet/build$ make server
+SHNet/build$ make multiple_client
+SHNet/build$ make single_client
 ```
 
-生成的可执行文件在`build/test`目录下，这时使用`./test/server`即可运行服务器。
+生成的可执行文件在`build/bin`目录下，这时使用`./bin/server`即可运行服务器。
 
 
 
