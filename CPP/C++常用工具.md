@@ -1254,7 +1254,11 @@ $ clang-format -i test.cpp
 
 `clang-tidy`是`clang`编译器的代码分析工具，既可以查找代码中的静态错误，也可以提示可能会在运行时发生的问题，以及通过代码分析给出可提升程序性能的建议。
 
-安装：见 [clang - 升级](#升级) 中的第8步；
+安装：
+
+- 见 [clang - 升级](#升级) 中的第8步；
+- [clang-tidy 静态代码分析框架](https://inktea.xyz/2022/b47a.html); 
+- [clang-tidy静态语义检查，安装、使用、检查项注解](https://blog.csdn.net/Fenplan/article/details/119755111);
 
 使用：
 
@@ -1271,6 +1275,54 @@ $ clang-tidy -checks="-*,misc-unused-using-decls" -fix path/to/simple.cc --
 // 找出a.c中没有用到的using declarations. 这里需要path/to/project/compile_commands.json存在
 $ clang-tidy -checks="-*,misc-unused-using-decls" path/to/project/a.cc
 ```
+
+常用的方法：
+
+`clang-tidy -checks="-*,xxxx" main.cpp --`;
+
+使用时，位于`main.cpp`所在目录并输入上述命令，其中`xxxx`表示某种检查规则（如果是`-checks="*"`表示对所有项进行检查，可能会出现太多警告），这些规则可以参考[clang-tidy checks](https://clang.llvm.org/extra/clang-tidy/checks/list.html); 以其中的`modernize-use-nullptr`为例：
+
+如果代码中有一个指针是`lru_cache = 0`,在使用clang-tidy后如下所示：
+
+```sh
+sean@sean-virtual-machine:~/xxx/cache$ clang-tidy -checks="-*,modernize-use-nullptr" main.cpp --
+58 warnings generated.
+/home/sean/xxx/cache/main.cpp:26:17: warning: use nullptr [modernize-use-nullptr]
+    lru_cache = 0;
+                ^
+                nullptr
+Suppressed 57 warnings (57 in non-user code).
+Use -header-filter=.* to display errors from all non-system headers. Use -system-headers to display errors from system headers as well.
+```
+
+即提示空指针不能是`NULL`或`0`，而应该是`nullptr`；如果加上`-fix-errors`参数，则可以用来改正该错误:
+
+```sh
+sean@sean-virtual-machine:~/xxx/cache$ clang-tidy -checks="-*,modernize-use-nullptr" -fix main.cpp --
+58 warnings generated.
+/home/sean/xxx/cache/main.cpp:26:17: warning: use nullptr [modernize-use-nullptr]
+    lru_cache = 0;
+                ^
+                nullptr
+/home/sean/xxx/cache/main.cpp:26:17: note: FIX-IT applied suggested code changes
+clang-tidy applied 1 of 1 suggested fixes.
+Suppressed 57 warnings (57 in non-user code).
+Use -header-filter=.* to display errors from all non-system headers. Use -system-headers to display errors from system headers as well.
+
+sean@sean-virtual-machine:~/xxx/cache$ clang-tidy -checks="-*,modernize-use-nullptr" -fix-errors main.cpp --
+57 warnings generated.
+Suppressed 57 warnings (57 in non-user code).
+Use -header-filter=.* to display errors from all non-system headers. Use -system-headers to display errors from system headers as well.
+```
+
+经测试，修复错误时需要使用这两个命令：(即先`-fix`再`-fix-errors`，两次`-fix-errors`也成功修复了)
+
+```sh
+$ clang-tidy -checks="-*,modernize-use-nullptr" -fix main.cpp --
+$ clang-tidy -checks="-*,modernize-use-nullptr" -fix-errors main.cpp --
+```
+
+
 
 
 
