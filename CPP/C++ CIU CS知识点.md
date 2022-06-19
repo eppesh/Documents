@@ -256,7 +256,7 @@ CPU执行程序过程：
 
 ---
 
-**一维数组示例** - Sieve of Eratosthenes (质数筛选算法):
+**一维数组示例** - Sieve of Eratosthenes (埃氏质数筛选算法):
 
 参考：[LeetCode - Count Primes](https://leetcode.cn/problems/count-primes/); (Given an integer `n`, return the number of prime numbers that are strictly less than `n`.)
 
@@ -270,12 +270,13 @@ int countPrimes(int n)
         prime[i] = true;
     }
     */
-    std::vector<bool> prime(n+1, true); // 不确定是否是质数时,为true; 确定一定不是质数是,为false
+    std::vector<bool> prime(n+1, true); // 不确定是否是质数时,为true; 确定一定不是质数时,为false
     for(int divisor = 2; divisor*divisor <= n; ++divisor)
     {
         if(prime[divisor])
         {
             for(int i = 2*divisor; i<=n; i+=divisor)
+            // for( int i = divisor*divisor; i<=n; i+=divisor)	// 进一步优化
             {
                 prime[i] = false;
             }
@@ -290,6 +291,85 @@ int countPrimes(int n)
         }
     }
     return count;
+}
+```
+
+说明：
+
+1. 埃氏质筛法思路：质数`divisor`的倍数`i*divisor (i>=2)`一定不是质数，即`divisor`的2倍、3倍、4倍、...、`i`倍一定不是质数。先假设所有数都可能是质数，然后过滤掉所有**一定不是质数**的数，剩下的就一定是质数。因此，算法的一个核心目标就是**寻找那些一定不是质数的数**。
+
+2. 如何理解内层循环`for(int i = 2*divisor; i<=n; i+=divisor)`?
+
+   - 如上面所说，**质数`divisor`的2倍、3倍、4倍、...、`i`倍一定不是质数**。当`divisor`是质数时，循环初始值`2*divisor`表示该质数的2倍，下一次循环时`i  = 2*divisor + divisor = 3*divisor`表示该质数的3倍，这样一直循环到超过给定的范围上限为止。
+
+   - 可以发现，对每一个质数`divisor`，我们都是把它的“2倍、3倍、4倍、...、`i`倍”数进行过滤，即：
+
+   | 质数 | 质数的2倍,3倍,4倍, ... i 倍 ( i>=2)                    |
+   | ---- | ------------------------------------------------------ |
+   | 2    | **4**, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, ... , 2*i |
+   | 3    | 6, **9**, 12, 15, 18, 21, 24, 27, ... , 3*i            |
+   | 5    | 10, 15, 20, **25**, ... , 5*i                          |
+   | 7    | 14, 21, 28, 35, ... , 7*i                              |
+
+   - 在上述表格中会发现存在很多重复，因此，还可以进一步优化：`for( int i = divisor*divisor; i<=n; i+=divisor)`;
+
+     这是因为，比`divisor*divisor`小的合数，在之前的质数倍数中已经被过滤掉了，无须重复过滤。
+
+3. 为何外层循环要使用`divisor*divisor <= n`而不是`divisor <= n`?
+
+   - 如果一个数`divisor`一定不是质数，那么必有其对应的`n/divisor`也一定不是质数，它们俩互为数字`n`的两个因子。显然这两个因子，只需要判断其中一个一定不是质数即可，剩下那个就无须重复判断了。
+
+   - 从优化遍历次数方面考虑，对`divisor`和`n/divisor`两者中较小的那个进行判断时可以减少遍历次数。虽然无法直观比较这两个因子大小，但可以发现较小的那个因子一定是位于`[1, √n]`这个区间内。
+
+     > 反证：如果`divisor > √n`，那么`1/divisor < 1/√n`，进而`n/divisor < n/√n = √n`，即`n/divisor < √n`；
+
+   - 因此，外层循环的条件只须`diviosr * diviso <= n`即可。
+
+   | n    | d    |      |      |      |      |      |      |      |      |      |      |      |      |      |      |      |      |      |      |
+   | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- | ---- |
+   | 36   | 2    | 3    | 4    | 5    | 6    | 7    | 8    | 9    | 10   | 11   | 12   | 13   | 14   | 15   | 16   | 17   | 18   | 19   | 20   |
+   |      | 18   | 12   | 9    | x    | 6    | x    | x    | x    | x    | x    | 3    | x    | x    | x    | x    | x    | 2    | x    | x    |
+
+   
+
+**二维数组示例** - Pascal's Triangle (杨辉三角):
+
+参考：[LeetCode - pascals-triangle](https://leetcode.cn/problems/pascals-triangle/); (Given an integer `numRows`, return the first numRows of Pascal's Triangle.)
+
+```c++
+vector<vector<int>> generate(int numRows) 
+{
+    vector<vector<int>> res(numRows);
+    for(int i=0; i<numRows; ++i)
+    {
+        res[i] = vector<int>(i+1);
+        res[i][0] = 1;
+        for(int j=1; j<i; ++j)
+        {
+            res[i][j] = res[i-1][j-1] + res[i-1][j];
+        }
+        res[i][i] = 1;
+    }
+    return res;
+}
+// 不使用vector时
+int** PascalTriangle(int n)
+{
+    int **p = new int*[n];
+    for (int i=0; i< n; ++i)
+    {
+        p[i] = new int[i + 1];
+        p[i][0] = 1;
+        std::cout << p[i][0];
+        for (int j = 1; j < i; ++j)
+        {
+            p[i][j] = p[i - 1][j - 1] + p[i - 1][j];
+            std::cout << p[i][j];
+        }
+        p[i][i] = 1;
+        std::cout << p[i][i] << std::endl;
+    }
+    return p;
 }
 ```
 
