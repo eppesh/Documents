@@ -330,8 +330,6 @@ int countPrimes(int n)
    | 36   | 2    | 3    | 4    | 5    | 6    | 7    | 8    | 9    | 10   | 11   | 12   | 13   | 14   | 15   | 16   | 17   | 18   | 19   | 20   |
    |      | 18   | 12   | 9    | x    | 6    | x    | x    | x    | x    | x    | 3    | x    | x    | x    | x    | x    | 2    | x    | x    |
 
-   
-
 **二维数组示例** - Pascal's Triangle (杨辉三角):
 
 参考：[LeetCode - pascals-triangle](https://leetcode.cn/problems/pascals-triangle/); (Given an integer `numRows`, return the first numRows of Pascal's Triangle.)
