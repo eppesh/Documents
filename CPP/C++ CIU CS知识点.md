@@ -223,7 +223,7 @@ CPU执行程序过程：
 
 目标：实现一个可自动调整大小的动态数组。（比如：手动实现`std::vector`）
 
-- [ ] 介绍：
+- [x] 介绍：
   - [数组（视频）](https://www.coursera.org/learn/data-structures/lecture/OsBSF/arrays)
   - [UC Berkeley CS61B - 线性数组和多维数组（视频）](https://archive.org/details/ucberkeley_webcast_Wp8oiO_CZZE)（从15分32秒开始）
   - [动态数组（视频）](https://www.coursera.org/learn/data-structures/lecture/EwbnV/dynamic-arrays)
@@ -256,7 +256,9 @@ CPU执行程序过程：
 
 ---
 
-**一维数组示例** - Sieve of Eratosthenes (埃氏质数筛选算法):
+### 一维数组示例
+
+Sieve of Eratosthenes (埃氏质数筛选算法):
 
 参考：[LeetCode - Count Primes](https://leetcode.cn/problems/count-primes/); (Given an integer `n`, return the number of prime numbers that are strictly less than `n`.)
 
@@ -330,7 +332,9 @@ int countPrimes(int n)
    | 36   | 2    | 3    | 4    | 5    | 6    | 7    | 8    | 9    | 10   | 11   | 12   | 13   | 14   | 15   | 16   | 17   | 18   | 19   | 20   |
    |      | 18   | 12   | 9    | x    | 6    | x    | x    | x    | x    | x    | 3    | x    | x    | x    | x    | x    | 2    | x    | x    |
 
-**二维数组示例** - Pascal's Triangle (杨辉三角):
+### 二维数组示例
+
+Pascal's Triangle (杨辉三角):
 
 参考：[LeetCode - pascals-triangle](https://leetcode.cn/problems/pascals-triangle/); (Given an integer `numRows`, return the first numRows of Pascal's Triangle.)
 
@@ -371,3 +375,72 @@ int** PascalTriangle(int n)
 }
 ```
 
+### 动态数组实现
+
+即手写`std::vector`中主要方法。一些知识点：
+
+#### 扩容
+
+动态数组的“动态”主要提现在可以自动扩容上。当容量不足时，动态数组会自动扩容；但当容量有很大富余时一般不进行缩容，本例中有缩容要求，因此在特定条件下也会动态缩减容量。
+
+自动扩容时的增长因子：即扩容倍数；`新容量 = 旧容量 * 增长因子`；一般取`[1,2]`，VS2019用的是1.5，GCC用的是2；
+
+缩减因子：`新容量 = 旧容量 / 缩减因子`;
+
+> 参考: 
+>
+> - [HashMap的初始容量(initialCapacity)和装载因子(loadFactor)](https://blog.csdn.net/sunxuefen2009/article/details/17247833); 
+> - [java 中使用v8引擎_深入V8引擎-AST(5)](https://blog.csdn.net/weixin_35755562/article/details/114516746);
+> - [ArrayList, Vector, HashMap, HashSet的默认初始容量,加载因子,扩容增量](https://www.cnblogs.com/xiezie/p/5511840.html); 
+> - [C++ STL vector扩容原理分析](https://blog.51cto.com/u_15127635/4165976); 
+> - [HashMap中的初始容量和加载因子](https://blog.csdn.net/weixin_44723496/article/details/112387738); 
+> - [HashMap中的初始容量和加载因子到底是表示什么意思呢?](https://blog.csdn.net/weixin_44560342/article/details/106119595); 
+
+扩容两种情况：
+
+1. 根据构造函数时的入参设置初始容量(initial_capacity)：调用`int DetermineCapacity(int capacity)`函数返回处理后的容量；
+2. 数组使用过程中容量不足需要扩容：直接`新容量 = 旧容量 * 增长因子`；但为了统一，也包含在了`int DetermineCapacity(int capacity)`函数中。
+
+> 当需要扩容时，无论是上述哪种情况，直接调用`DeterminCapacity`函数即可；
+
+缩减容量只有1种情况：根据要求，当数组元素个数小于等于`容积 / 缩减因子`时，将容积缩减一半。直接`新容量 = 旧容量 / 2`;
+
+```c++
+static const int kMinCapacity = 16;			// 最小容量
+static const int KGrowthFactor = 2;         // 增长因子；新容量 = 旧容量 * 增长因子
+static const int kShrinkFactor = 4;			// 缩减因子；缩容条件满足：当前元素个数 <= 当前容量 / 缩减因子；
+
+// 第一次调用该函数时（即构造函数时），参数capacity又称为初始容量(initial_capacity)
+// 后面扩容/缩容前调用该函数时，
+int DetermineCapacity(int capacity) const
+{
+    int true_capacity = kMinCapacity;
+
+    while (capacity > true_capacity / KGrowthFactor)
+    {
+        true_capacity *= KGrowthFactor;
+    }
+
+    return true_capacity;
+}
+```
+
+上述函数的作用：格式化+扩容；
+
+即，将指定容量(`capacity`)格式化为符合“标准”内存大小（即`2^n`，如`16,32,64,128,256,512,1024...`）的“真正”容量；（因为分配的内存大小一般为`2^n`，所以如果输入的初始容量为`7、13、33`这种大小，就会调整为相应的`2^n`）
+
+- 如果入参`capacity`已经是`2^n`，则计算结果等于`capacity * kGrowthFactor`；
+
+- 如果入参`capacity`不是`2^n`，则计算后的结果会取“第一个大于`capacity`的那个`2^n`的`kGrowthFactor`倍”，结果不足`kMinCapacity`时取`kMinCapacity`；
+
+  > 详细说明：
+  >
+  > - 先找到第一个比`capacity`大的`2^n`类型的数，它的**2倍**作为“真正”容量；
+  >
+  >   如：假设`kMinCapacity = 32, capacity=28`，第一个比28大的`2^n`就是32，那么32的2倍64就是“真正”容量；
+  >
+  > - 如果2倍后的结果小于“最小容量(`kMinCapacity`)”，则“最小容量”就是“真正”容量；
+  >
+  >   如：假设`kMinCapacity = 128, capacity=28`，第一个比28大的`2^n`就是32，但`32 < kMinCapacity`，因此“最小容量”128就是“真正”容量；
+
+Sean注：1. 对于初始容量，因为它可能不是2^n，因此需要用该函数去调整；2. 对于非初始容量，它已经通过上一步变成2^n了，因此后续再调用该函数进行扩容只是简单的`kGrowthFactor`倍*原容量（即，当形参是2^n时，只是简单的乘以增长因子即可）；3. 该函数是把这2点整合到了一个函数里。
