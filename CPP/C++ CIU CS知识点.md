@@ -228,29 +228,29 @@ CPU执行程序过程：
   - [UC Berkeley CS61B - 线性数组和多维数组（视频）](https://archive.org/details/ucberkeley_webcast_Wp8oiO_CZZE)（从15分32秒开始）
   - [动态数组（视频）](https://www.coursera.org/learn/data-structures/lecture/EwbnV/dynamic-arrays)
   - [不规则数组（视频）](https://www.youtube.com/watch?v=1jtrQqYpt7g)
-- [ ] 实现一个动态数组（可自动调整大小的可变数组）：
-  - [ ] 练习使用数组和指针去编码，并且指针是通过计算去跳转而不是使用索引
-  - [ ] 通过分配内存来新建一个原生数据型数组
+- [x] 实现一个动态数组（可自动调整大小的可变数组）：
+  - [x] 练习使用数组和指针去编码，并且指针是通过计算去跳转而不是使用索引【目前还是用的索引】
+  - [x] 通过分配内存来新建一个原生数据型数组
     - 可以使用 int 类型的数组，但不能使用其语法特性
     - 从大小为16或更大的数（使用2的倍数 —— 16、32、64、128）开始编写
-  - [ ] size() —— 数组元素的个数
-  - [ ] capacity() —— 可容纳元素的个数
-  - [ ] is_empty()
-  - [ ] at(index) —— 返回对应索引的元素，且若索引越界则愤然报错
-  - [ ] push(item)
-  - [ ] insert(index, item) —— 在指定索引中插入元素，并把后面的元素依次后移
-  - [ ] prepend(item) —— 可以使用上面的 insert 函数，传参 index 为 0
-  - [ ] pop() —— 删除在数组末端的元素，并返回其值
-  - [ ] delete(index) —— 删除指定索引的元素，并把后面的元素依次前移
-  - [ ] remove(item) —— 删除指定值的元素，并返回其索引（即使有多个元素）
-  - [ ] find(item) —— 寻找指定值的元素并返回其中第一个出现的元素其索引，若未找到则返回 -1
-  - [ ] resize(new_capacity) // 私有函数
+  - [x] size() —— 数组元素的个数
+  - [x] capacity() —— 可容纳元素的个数
+  - [x] is_empty()
+  - [x] at(index) —— 返回对应索引的元素，且若索引越界则愤然报错
+  - [x] push(item)
+  - [x] insert(index, item) —— 在指定索引中插入元素，并把后面的元素依次后移
+  - [x] prepend(item) —— 可以使用上面的 insert 函数，传参 index 为 0
+  - [x] pop() —— 删除在数组末端的元素，并返回其值
+  - [x] delete(index) —— 删除指定索引的元素，并把后面的元素依次前移
+  - [x] remove(item) —— 删除指定值的元素，并返回其索引（即使有多个元素）
+  - [x] find(item) —— 寻找指定值的元素并返回其中第一个出现的元素其索引，若未找到则返回 -1
+  - [x] resize(new_capacity) // 私有函数
     - 若数组的大小到达其容积，则变大一倍
     - 获取元素后，若数组大小为其容积的1/4，则缩小一半
-- [ ] 时间复杂度
+- [x] 时间复杂度
   - 在数组末端增加/删除、定位、更新元素，只允许占 O(1) 的时间复杂度（平摊（amortized）去分配内存以获取更多空间）
   - 在数组任何地方插入/移除元素，只允许 O(n) 的时间复杂度
-- [ ] 空间复杂度
+- [x] 空间复杂度
   - 因为在内存中分配的空间邻近，所以有助于提高性能
   - 空间需求 = （大于或等于 n 的数组容积）* 元素的大小。即便空间需求为 2n，其空间复杂度仍然是 O(n)
 
@@ -377,7 +377,7 @@ int** PascalTriangle(int n)
 
 ### 动态数组实现
 
-即手写`std::vector`中主要方法。一些知识点：
+即手写`std::vector`中主要方法。
 
 #### 扩容
 
@@ -444,3 +444,256 @@ int DetermineCapacity(int capacity) const
   >   如：假设`kMinCapacity = 128, capacity=28`，第一个比28大的`2^n`就是32，但`32 < kMinCapacity`，因此“最小容量”128就是“真正”容量；
 
 Sean注：1. 对于初始容量，因为它可能不是2^n，因此需要用该函数去调整；2. 对于非初始容量，它已经通过上一步变成2^n了，因此后续再调用该函数进行扩容只是简单的`kGrowthFactor`倍*原容量（即，当形参是2^n时，只是简单的乘以增长因子即可）；3. 该函数是把这2点整合到了一个函数里。
+
+示例代码中的`Resize()`不同于`std::vector`中的`resize()/reserve()`；示例中没有提供指定容积的自定义扩容/减容，`Resize()`只会在当前元素已满或`size_ <= capacity_ / kShrinkFactor`时才会调整容积。
+
+#### 示例代码
+
+参考：[原作者的示例代码](https://github.com/jwasham/practice-cpp/tree/master/arrays);  [C++ vector模拟实现](https://blog.51cto.com/u_14982125/2699510); 
+
+该示例没有实现迭代器（其实就是`T*`）等，也可以通过三个指针来实现，可参考[C++ vector模拟实现](https://blog.51cto.com/u_14982125/2699510); 
+
+```c++
+// Name: svector.h
+// Copyright 2022 SH Inc. All rights reserved.
+// License:
+// Author: Sean (eppesh@163.com)
+// Time: 06/20/2022
+// Description: A dynamical Array.
+
+#ifndef SVECTOR_H_
+#define SVECTOR_H_
+
+#include <iostream>
+
+namespace sh
+{
+static const int kMinCapacity = 16;
+static const int KGrowthFactor = 2;         // 增长因子;即扩容时,新容量是旧容量的倍数,一般取[1,2];VS2019取的是1.5倍,GCC取的是2倍
+static const int kShrinkFactor = 4; 
+
+template<typename T>
+class SVector
+{
+public:
+    SVector(int capacity) :size_(0)
+    {
+        if (capacity < 1)
+        {
+            std::cout << "Cannot make vector of that size" << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        int true_capacity = DetermineCapacity(capacity);
+        capacity_ = true_capacity;
+        data_ = std::unique_ptr<T[]>(new T[capacity_]);
+    }
+
+    ~SVector()
+    {
+
+    }
+
+    int Size() const
+    {
+        return size_;
+    }
+
+    bool Empty() const
+    {
+        return size_ == 0;
+    }
+
+    int Capacity() const
+    {
+        return capacity_;
+    }
+
+    void PushBack(T value)
+    {
+        Resize(size_ + 1);
+
+        data_[size_] = value;
+        ++size_;
+    }
+
+    T At(int index) const
+    {
+        if (index < 0 || index >= size_)
+        {
+            std::cout << "Index out of bounds." << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        return data_[index];
+    }
+
+    T PopBack()
+    {
+        if (size_ == 0)
+        {
+            std::cout << "Nothing to PopBack." << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        Resize(size_ - 1);
+        T value = data_[size_ - 1];
+        --size_;
+        return value;
+    }
+
+    void Insert(int index, T value)
+    {
+        if (index < 0 || index >= size_)
+        {
+            std::cout << "Index out of bounds." << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        Resize(size_ + 1);
+        // shift items to the right
+        for (int i = size_; i > index; --i)
+        {
+            data_[i] = data_[i - 1];
+        }
+        // insert item
+        data_[index] = value;
+        ++size_;
+    }
+
+
+    void Prepend(T value)
+    {
+        return Insert(0, value);
+    }
+
+    void Erase(int index)
+    {
+        if (index < 0 || index >= size_)
+        {
+            std::cout << "Index out of bounds." << std::endl;
+            exit(EXIT_FAILURE);
+        }
+        Resize(size_ - 1);
+        for (int i = index; i < size_ - 1; ++i)
+        {
+            data_[i] = data_[i + 1];
+        }
+        --size_;
+    }
+
+    void Remove(T value)
+    {
+        for (int i = 0; i < size_; ++i)
+        {
+            if (data_[i] == value)
+            {
+                Erase(i);
+                --i;    // since items will shift, recheck this index
+            }
+        }
+    }
+
+    int Find(T value) const
+    {
+        for (int i = 0; i < size_; ++i)
+        {
+            if (data_[i] == value)
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    // 打印同SVector的公共信息
+    void DebugInfo() const
+    {
+        std::cout << "size: " << size_ << std::endl
+            << "capacity: " << capacity_ << std::endl
+            << "items: " << std::endl;
+
+        for (int i = 0; i < size_; ++i)
+        {
+            std::cout << "[" << i << "]: " << data_[i] << std::endl;
+        }
+    }
+
+private:
+    void Resize(int candidate_size)
+    {
+        if (candidate_size > size_)     // grow
+        {
+            if (size_ == capacity_)
+            {
+                IncreaseSize();
+            }
+        }
+        else if (candidate_size < size_) // shrink
+        {
+            if (size_ < capacity_ / kShrinkFactor)
+            {
+                DecreaseSize();
+            }
+        }
+    }
+    // 该函数会根据初始容量(initial_capacity)设置一个大于初始容量的第1个2^n的2倍
+    int DetermineCapacity(int initial_capacity) const
+    {
+        int true_capacity = kMinCapacity;
+
+        while (initial_capacity > true_capacity / KGrowthFactor)
+        {
+            true_capacity *= KGrowthFactor;
+        }
+
+        return true_capacity;
+    }
+
+    // 根据当前容积进行扩容
+    void IncreaseSize()
+    {
+        int old_capacity = capacity_;
+        int new_capacity = DetermineCapacity(old_capacity);
+
+        if (old_capacity != new_capacity)
+        {
+            std::unique_ptr<T[]> new_data(new T[new_capacity]);
+            // 也可用memcpy
+            for (int i = 0; i < size_; ++i)
+            {
+                new_data[i] = data_[i];
+            }
+
+            data_ = std::move(new_data);
+            capacity_ = new_capacity;
+        }
+    }
+
+    void DecreaseSize()
+    {
+        int old_capacity = capacity_;
+        int new_capacity = old_capacity / 2;
+
+        if (new_capacity < kMinCapacity)
+        {
+            new_capacity = kMinCapacity;
+        }
+
+        if (new_capacity != old_capacity)
+        {
+            std::unique_ptr<T[]> new_data(new T[new_capacity]);
+            for (int i = 0; i < size_; ++i)
+            {
+                new_data[i] = data_[i];
+            }
+            data_ = std::move(new_data);
+            capacity_ = new_capacity;
+        }
+    }
+
+private:
+    int capacity_{ kMinCapacity }; 
+    int size_{ 0 };                             // The number of items currently stored
+    std::unique_ptr<T[]> data_;
+};
+} // namespace sh
+#endif
+```
+
